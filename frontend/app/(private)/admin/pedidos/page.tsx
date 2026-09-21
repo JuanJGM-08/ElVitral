@@ -1,0 +1,601 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { formatNumber } from '@/lib/format';
+
+interface Pedido {
+  id: number;
+  cotizacion_id?: number;
+  usuario_id: number;
+  fecha_pedido: string;
+  fecha_entrega?: string;
+  estado: 'pendiente' | 'en_proceso' | 'listo' | 'entregado';
+  pago: 'pendiente' | 'pagado' | 'anticipo';
+  total: number;
+  notas?: string;
+  nombre_cliente?: string;
+}
+
+const estadosOrdenados: Array<Pedido['estado']> = [
+  'pendiente',
+  'en_proceso',
+  'listo',
+  'entregado'
+];
+
+const etiquetasEstado: Record<Pedido['estado'], string> = {
+  pendiente: 'Pendientes',
+  en_proceso: 'En proceso',
+  listo: 'Listos',
+  entregado: 'Entregados'
+};
+
+const colorEstado: Record<Pedido['estado'], string> = {
+  pendiente: 'bg-yellow-900/50 text-yellow-300',
+  en_proceso: 'bg-blue-900/50 text-blue-300',
+  listo: 'bg-green-900/50 text-green-300',
+  entregado: 'bg-gray-700 text-gray-300'
+};
+
+const colorPago: Record<Pedido['pago'], string> = {
+  pendiente: 'bg-red-900/50 text-red-300',
+  anticipo: 'bg-yellow-900/50 text-yellow-300',
+  pagado: 'bg-green-900/50 text-green-300'
+};
+
+export default function AdminPedidosPage() {
+  const [pedidos, setPedidos] = useState<Pedido[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [mensaje, setMensaje] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
+
+  // Estado para el modal de confirmación
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'estado' | 'pago';
+    pedidoId: number;
+    nuevoValor: string;
+    mensaje: string;
+    fechaEntrega?: string;
+  } | null>(null);
+
+  const [showFechaModal, setShowFechaModal] = useState(false);
+  const [fechaEntregaInput, setFechaEntregaInput] = useState('');
+  
+  // Estado para acciones móviles
+  const [mobileActionPedido, setMobileActionPedido] = useState<Pedido | null>(null);
+
+  const fetchPedidos = async () => {
+    try {
+      const res = await fetch('/api/admin/pedidos', {
+        credentials: 'include'
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        setError(errorData?.error || `Error en la respuesta: ${res.status} ${res.statusText}`);
+        setPedidos([]);
+        return;
+      }
+
+      const data = await res.json();
+      if (!Array.isArray(data)) {
+        setError('Datos de pedidos inválidos');
+        setPedidos([]);
+      } else {
+        setPedidos(data);
+      }
+    } catch (err) {
+      console.error('Error al cargar pedidos:', err);
+      setError('Error al cargar pedidos');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchPedidos();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const actualizarEstado = async (pedidoId: number, nuevoEstado: string) => {
+    const pedido = pedidos.find(p => p.id === pedidoId);
+    if (!pedido) return;
+
+    if (nuevoEstado === pedido.estado) return;
+
+    if (nuevoEstado === 'entregado' && !pedido.fecha_entrega) {
+      setMensaje({ tipo: 'error', texto: 'Debe establecer la fecha de entrega antes de marcar el pedido como entregado. Cambie el estado a "Listo" primero.' });
+      return;
+    }
+
+    if (nuevoEstado === 'listo' && !pedido.fecha_entrega) {
+      setConfirmAction({
+        type: 'estado',
+        pedidoId,
+        nuevoValor: nuevoEstado,
+        mensaje: `¿Marcar el pedido #${pedidoId} como listo?`,
+      });
+      setFechaEntregaInput('');
+      setShowFechaModal(true);
+      return;
+    }
+
+    setConfirmAction({
+      type: 'estado',
+      pedidoId,
+      nuevoValor: nuevoEstado,
+      mensaje: `¿Cambiar el estado del pedido #${pedidoId} de "${pedido.estado}" a "${nuevoEstado}"?`
+    });
+    setShowConfirmModal(true);
+  };
+
+  const actualizarPago = async (pedidoId: number, nuevoPago: string) => {
+    const pedido = pedidos.find(p => p.id === pedidoId);
+    if (!pedido) return;
+
+    setConfirmAction({
+      type: 'pago',
+      pedidoId,
+      nuevoValor: nuevoPago,
+      mensaje: `¿Cambiar el estado de pago del pedido #${pedidoId} de "${pedido.pago}" a "${nuevoPago}"?`
+    });
+    setShowConfirmModal(true);
+  };
+
+  const descargarPdfPedido = (id: number) => {
+    const url = `/api/admin/pedidos/${id}/pdf`;
+    window.open(url, '_blank');
+  };
+
+  const confirmarFechaEntrega = () => {
+    if (!fechaEntregaInput) {
+      setMensaje({ tipo: 'error', texto: 'Debe seleccionar una fecha de entrega' });
+      return;
+    }
+
+    setShowFechaModal(false);
+    setConfirmAction((prev) =>
+      prev ? { ...prev, fechaEntrega: fechaEntregaInput } : null
+    );
+    setShowConfirmModal(true);
+  };
+
+  const confirmarCambio = async () => {
+    if (!confirmAction) return;
+
+    try {
+      const payload: Record<string, string> = {
+        [confirmAction.type]: confirmAction.nuevoValor,
+      };
+
+      if (confirmAction.fechaEntrega) {
+        payload.fecha_entrega = confirmAction.fechaEntrega;
+      }
+
+      const res = await fetch(`/api/admin/pedidos/${confirmAction.pedidoId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        fetchPedidos();
+      } else {
+        const error = await res.json().catch(() => null);
+        setMensaje({ tipo: 'error', texto: error?.error || `Error al actualizar el ${confirmAction.type}` });
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      setMensaje({ tipo: 'error', texto: 'Error al conectar con el servidor' });
+    } finally {
+      setShowConfirmModal(false);
+      setConfirmAction(null);
+    }
+  };
+
+  const pedidosPorEstado = useMemo(() => {
+    return estadosOrdenados.reduce<Record<Pedido['estado'], Pedido[]>>((acc, estado) => {
+      acc[estado] = pedidos.filter((pedido) => pedido.estado === estado);
+      return acc;
+    }, {
+      pendiente: [],
+      en_proceso: [],
+      listo: [],
+      entregado: []
+    });
+  }, [pedidos]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen" style={{ backgroundColor: '#101828'}}>
+        <div className="max-w-7xl mx-auto px-4 py-12">
+          <div className="flex justify-between items-center mb-8">
+            <div>
+              <h1 className="text-3xl font-bold text-white">Gestión de Pedidos</h1>
+              <p className="text-gray-300 mt-1">Cargando pedidos desde la base de datos...</p>
+            </div>
+            <Link
+            href="/admin"
+            className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            ← Volver al Panel
+          </Link>
+          </div>
+
+          <div className="flex items-center justify-center py-16">
+            <div className="text-white text-xl">Cargando pedidos...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen" style={{ backgroundColor: '#101828'}}>
+      <div className="max-w-7xl mx-auto px-4 py-12">
+        <div className="flex justify-between items-start gap-4 mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-white">Gestión de Pedidos</h1>
+            <p className="text-gray-300 mt-1">
+              Los pedidos están divididos por estado y se pueden actualizar desde aquí.
+            </p>
+          </div>
+
+          <Link
+            href="/admin"
+            className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            ← Volver al Panel
+          </Link>
+        </div>
+
+        {mensaje && (
+          <div className={`mb-6 rounded-xl border p-4 text-sm ${mensaje.tipo === 'ok' ? 'border-green-600 bg-green-900/30 text-green-200' : 'border-red-500 bg-red-900/30 text-red-200'}`}>
+            {mensaje.texto}
+          </div>
+        )}
+
+        {error ? (
+          <div className="rounded-xl bg-red-900/50 border border-red-500 p-6 text-red-200">
+            {error}
+          </div>
+        ) : pedidos.length === 0 ? (
+          <div className="rounded-lg p-10 text-center" style={{ backgroundColor: '#1e2939'}}>
+            <p className="text-gray-500 text-lg">No hay pedidos registrados</p>
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {estadosOrdenados.map((estado) => {
+              const pedidosEstado = pedidosPorEstado[estado];
+
+              return (
+                <section key={estado} className="rounded-lg shadow-sm overflow-hidden" style={{ backgroundColor: '#1e2939'}}>
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700 bg-gray-800">
+                    <div>
+                      <h2 className="text-xl font-bold text-white">{etiquetasEstado[estado]}</h2>
+                      <p className="text-sm text-gray-300">{pedidosEstado.length} pedido(s)</p>
+                    </div>
+
+                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${colorEstado[estado]}`}>
+                      {estado}
+                    </span>
+                  </div>
+
+                  {pedidosEstado.length === 0 ? (
+                    <div className="p-6 text-center text-gray-400">
+                      No hay pedidos en este estado.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-800">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                              ID
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                              Fecha Pedido
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                              Cliente
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                              Fecha Entrega
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                              Total
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                              Estado
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                              Pago
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                              Acciones
+                            </th>
+                          </tr>
+                        </thead>
+
+                        <tbody className="divide-y divide-gray-700">
+                          {pedidosEstado.map((pedido) => (
+                            <tr key={pedido.id} className="hover:bg-gray-800/50">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
+                                #{pedido.id}
+                              </td>
+
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                {new Date(pedido.fecha_pedido).toLocaleDateString()}
+                              </td>
+
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                {pedido.nombre_cliente || 'Sin nombre'}
+                              </td>
+
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                {pedido.fecha_entrega
+                                  ? new Date(pedido.fecha_entrega).toLocaleDateString()
+                                  : 'No definida'}
+                              </td>
+
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                ${formatNumber(pedido.total)}
+                              </td>
+
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span
+                                  className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${colorEstado[pedido.estado]}`}
+                                >
+                                  {pedido.estado}
+                                </span>
+                              </td>
+
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span
+                                  className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${colorPago[pedido.pago]}`}
+                                >
+                                  {pedido.pago}
+                                </span>
+                              </td>
+
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                {/* Desktop actions */}
+                                <div className="hidden md:block space-y-3">
+                                  <div>
+                                    <label className="block text-xs text-gray-400 mb-1">Estado del proceso</label>
+                                    <select
+                                      value={pedido.estado}
+                                      onChange={(e) => actualizarEstado(pedido.id, e.target.value)}
+                                      className="w-full rounded-md border border-gray-600 bg-gray-800 text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                    >
+                                      <option value="pendiente">Pendiente</option>
+                                      <option value="en_proceso">En proceso</option>
+                                      <option value="listo">Listo</option>
+                                      <option value="entregado" disabled={!pedido.fecha_entrega}>
+                                        Entregado{!pedido.fecha_entrega ? ' (requiere fecha)' : ''}
+                                      </option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs text-gray-400 mb-1">Estado del pago</label>
+                                    <select
+                                      value={pedido.pago}
+                                      onChange={(e) => actualizarPago(pedido.id, e.target.value)}
+                                      className="w-full rounded-md border border-gray-600 bg-gray-800 text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                    >
+                                      <option value="pendiente">Pendiente</option>
+                                      <option value="anticipo">Anticipo</option>
+                                      <option value="pagado">Pagado</option>
+                                    </select>
+                                  </div>
+                                  <button
+                                    onClick={() => descargarPdfPedido(pedido.id)}
+                                    className="w-full text-left text-cyan-400 hover:text-cyan-300 text-sm font-medium py-2"
+                                  >
+                                    Exportar PDF
+                                  </button>
+                                </div>
+                                
+                                {/* Mobile actions button */}
+                                <div className="md:hidden">
+                                  <button
+                                    onClick={() => setMobileActionPedido(pedido)}
+                                    className="w-full min-h-[44px] flex items-center justify-center gap-2 rounded-lg bg-gray-700 hover:bg-gray-600 px-4 py-2 text-white transition-colors border border-gray-600"
+                                  >
+                                    <span className="material-symbols-outlined text-sm">settings</span>
+                                    Acciones
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Modal de fecha de entrega (al marcar como listo) */}
+      {showFechaModal && confirmAction && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="rounded-lg shadow-xl max-w-md w-full mx-4" style={{ backgroundColor: '#1e2939' }}>
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold text-white">Fecha de entrega</h2>
+                <button
+                  onClick={() => {
+                    setShowFechaModal(false);
+                    setConfirmAction(null);
+                    setFechaEntregaInput('');
+                  }}
+                  className="text-gray-400 hover:text-gray-200 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+
+              <p className="text-gray-300 mb-4">
+                Indique la fecha en la que se entregará el pedido #{confirmAction.pedidoId}.
+              </p>
+
+              <label className="block text-sm text-gray-400 mb-2">Fecha de entrega</label>
+              <input
+                type="date"
+                value={fechaEntregaInput}
+                onChange={(e) => setFechaEntregaInput(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+                className="w-full rounded-md border border-gray-600 bg-gray-800 text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary mb-6"
+              />
+
+              <div className="flex gap-4 justify-end">
+                <button
+                  onClick={() => {
+                    setShowFechaModal(false);
+                    setConfirmAction(null);
+                    setFechaEntregaInput('');
+                  }}
+                  className="px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors border border-slate-500"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmarFechaEntrega}
+                  className="px-6 py-3 bg-primary hover:bg-secondary text-white font-semibold rounded-lg transition-colors border border-sky-500 shadow-lg shadow-sky-500/25"
+                >
+                  Continuar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación */}
+      {showConfirmModal && confirmAction && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60]">
+          <div className="rounded-lg shadow-xl max-w-md w-full mx-4" style={{ backgroundColor: '#1e2939' }}>
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold text-white">Confirmar cambio</h2>
+                <button
+                  onClick={() => {
+                    setShowConfirmModal(false);
+                    setConfirmAction(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-200 text-2xl min-h-[44px] min-w-[44px] flex items-center justify-center"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="text-center py-4">
+                <p className="text-gray-300 mb-6">{confirmAction.mensaje}</p>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <button
+                    onClick={() => {
+                      setShowConfirmModal(false);
+                      setConfirmAction(null);
+                    }}
+                    className="w-full sm:w-auto min-h-[44px] px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors border border-slate-500"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmarCambio}
+                    className="w-full sm:w-auto min-h-[44px] px-6 py-3 bg-primary hover:bg-secondary text-white font-semibold rounded-lg transition-colors border border-sky-500 shadow-lg shadow-sky-500/25"
+                  >
+                    Confirmar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de acciones para móvil */}
+      {mobileActionPedido && (
+        <div className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 md:hidden p-4">
+          <div className="rounded-2xl shadow-xl w-full mx-auto" style={{ backgroundColor: '#1e2939' }}>
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6 border-b border-gray-700 pb-4">
+                <div>
+                  <h2 className="text-xl font-bold text-white">Acciones del Pedido</h2>
+                  <p className="text-gray-400 text-sm">Pedido #{mobileActionPedido.id}</p>
+                </div>
+                <button
+                  onClick={() => setMobileActionPedido(null)}
+                  className="text-gray-400 hover:text-gray-200 text-3xl min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full hover:bg-gray-800 transition-colors"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Estado del proceso</label>
+                  <select
+                    value={mobileActionPedido.estado}
+                    onChange={(e) => {
+                      actualizarEstado(mobileActionPedido.id, e.target.value);
+                      setMobileActionPedido(null);
+                    }}
+                    className="w-full min-h-[48px] rounded-xl border border-gray-600 bg-gray-800 text-white px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary shadow-sm appearance-none"
+                  >
+                    <option value="pendiente">Pendiente</option>
+                    <option value="en_proceso">En proceso</option>
+                    <option value="listo">Listo</option>
+                    <option value="entregado" disabled={!mobileActionPedido.fecha_entrega}>
+                      Entregado{!mobileActionPedido.fecha_entrega ? ' (requiere fecha)' : ''}
+                    </option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Estado del pago</label>
+                  <select
+                    value={mobileActionPedido.pago}
+                    onChange={(e) => {
+                      actualizarPago(mobileActionPedido.id, e.target.value);
+                      setMobileActionPedido(null);
+                    }}
+                    className="w-full min-h-[48px] rounded-xl border border-gray-600 bg-gray-800 text-white px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary shadow-sm appearance-none"
+                  >
+                    <option value="pendiente">Pendiente</option>
+                    <option value="anticipo">Anticipo</option>
+                    <option value="pagado">Pagado</option>
+                  </select>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    onClick={() => {
+                      descargarPdfPedido(mobileActionPedido.id);
+                      setMobileActionPedido(null);
+                    }}
+                    className="w-full min-h-[48px] flex items-center justify-center gap-2 text-cyan-400 bg-cyan-900/30 hover:bg-cyan-900/50 rounded-xl px-4 text-base font-semibold transition-colors border border-cyan-800/50"
+                  >
+                    <span className="material-symbols-outlined">picture_as_pdf</span>
+                    Exportar a PDF
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
