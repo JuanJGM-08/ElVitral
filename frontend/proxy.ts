@@ -8,12 +8,15 @@ const PUBLIC_PATHS = [
   '/',
   '/catalogo',
   '/cotizar',
+  '/proyectos',
   '/sobre-nosotros',
   '/login',
   '/registro',
   '/olvide-password',
   '/reset-password',
-  '/consulta-cotizacion',
+  '/politica-privacidad',
+  '/politica-cookies',
+  '/terminos-condiciones',
 ]
 
 function isPublic(pathname: string) {
