@@ -1,0 +1,103 @@
+services:
+  database:
+    image: mysql:8.4
+    container_name: el-vitral-database
+    restart: unless-stopped
+
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+
+    ports:
+      - "3306:3306"
+
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./backend/database/seeder.sql:/docker-entrypoint-initdb.d/02-seeder.sql:ro
+
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+    container_name: el-vitral-backend
+    restart: unless-stopped
+
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DB_HOST: database
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      JWT_SECRET: ${JWT_SECRET}
+      ALLOWED_ORIGIN: http://localhost:3001
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+
+    ports:
+      - "4000:4000"
+
+    depends_on:
+      database:
+        condition: service_healthy
+
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_RECAPTCHA_SITE_KEY: ${NEXT_PUBLIC_RECAPTCHA_SITE_KEY}
+        NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}
+
+    container_name: el-vitral-frontend
+    restart: unless-stopped
+
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      BACKEND_URL: http://backend:4000
+      JWT_SECRET: ${JWT_SECRET}
+      RECAPTCHA_SECRET_KEY: ${RECAPTCHA_SECRET_KEY}
+
+    ports:
+      - "3001:3000"
+
+    depends_on:
+      - backend
+
+  phpmyadmin:
+    image: phpmyadmin:5-apache
+    container_name: el-vitral-phpmyadmin
+    restart: unless-stopped
+
+    environment:
+      PMA_HOST: database
+      PMA_PORT: 3306
+
+    ports:
+      - "8080:80"
+
+    depends_on:
+      database:
+        condition: service_healthy
+
+
+volumes:
+  mysql_data:
