@@ -79,4 +79,4 @@ cd backend
 npm run start
 ```
 
-Repositorio original del proyecto: https://github.com/SimonSSL01/EL-VITRAL
+Link al repositorio original: https://github.com/SimonSSL01/EL-VITRAL.git

@@ -372,3 +372,5 @@ Además de ampliar la cobertura funcional, también sería recomendable mejorar 
 - Ejecutar mediciones periódicas de cobertura mediante `jest --coverage`.
 - Añadir pruebas de integración utilizando una base de datos temporal.
 - Incorporar pruebas End-to-End (E2E) para validar el flujo completo del sistema desde el registro hasta la creación de pedidos.
+
+Link al repositorio original: https://github.com/SimonSSL01/EL-VITRAL.git

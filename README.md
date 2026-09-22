@@ -12,3 +12,4 @@ Resumen
 ---
 
 Realizado por Simón Sierra López, Jose Manuel Ruiz Zapata y Juan Jose Giraldo Monsalve.
+Link al repositorio original: https://github.com/SimonSSL01/EL-VITRAL.git
