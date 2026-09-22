@@ -1,11 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 const STORAGE_KEY = 'el-vitral-legal-notice-seen';
 
 export default function LegalNotice() {
+  const pathname = usePathname();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -15,6 +17,7 @@ export default function LegalNotice() {
     return () => clearTimeout(timer);
   }, []);
 
+  if (pathname?.startsWith('/admin')) return null;
   if (!visible) return null;
 
   return (

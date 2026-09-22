@@ -23,18 +23,18 @@ interface Usuario {
 }
 
 const tiposIconos: Record<string, string> = {
-  entrega: '📦',
-  consulta: '💬',
-  medidas: '📐',
-  pago: '💳',
-  otro: '📅',
+  entrega: 'inventory',
+  consulta: 'chat',
+  medidas: 'straighten',
+  pago: 'payments',
+  otro: 'event',
 };
 
 const estadoColores: Record<string, string> = {
-  pendiente: 'bg-yellow-900 text-yellow-200',
-  confirmada: 'bg-green-900 text-green-200',
-  realizada: 'bg-blue-900 text-blue-200',
-  cancelada: 'bg-red-900 text-red-200',
+  pendiente: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+  confirmada: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+  realizada: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+  cancelada: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
 };
 
 export default function AgendaAdminPage() {
@@ -51,49 +51,49 @@ export default function AgendaAdminPage() {
   const [confirmCitaId, setConfirmCitaId] = useState<number | null>(null);
   const router = useRouter();
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const citasRes = await fetch('/api/admin/agenda', { credentials: 'include' });
-        
-        const usuariosRes = await fetch('/api/admin/usuarios', { credentials: 'include' });
+  const fetchData = async () => {
+    try {
+      const [citasRes, usuariosRes, diasRes] = await Promise.all([
+        fetch('/api/admin/agenda', { credentials: 'include' }),
+        fetch('/api/admin/usuarios', { credentials: 'include' }),
+        fetch('/api/admin/agenda/dias-disponibles', { credentials: 'include' }),
+      ]);
 
-        const diasRes = await fetch('/api/admin/agenda/dias-disponibles', { credentials: 'include' });
+      if (!citasRes.ok) throw new Error('Error al cargar citas.');
+      if (!usuariosRes.ok) throw new Error('Error al cargar usuarios.');
 
-        if (!citasRes.ok) {
-          setError('Error al cargar citas. Por favor, intenta de nuevo.');
-          return;
-        }
+      const [citasData, usuariosData] = await Promise.all([
+        citasRes.json(),
+        usuariosRes.json(),
+      ]);
 
-        if (!usuariosRes.ok) {
-          setError('Error al cargar usuarios. Por favor, intenta de nuevo.');
-          return;
-        }
+      if (diasRes.ok) {
+        const diasData = await diasRes.json();
+        setDiasDisponibles(Array.isArray(diasData) ? diasData : []);
+      }
 
-        const citasData = await citasRes.json();
-        const usuariosData = await usuariosRes.json();
+      setCitas(
+        Array.isArray(citasData)
+          ? citasData.sort((a: Cita, b: Cita) => new Date(b.fecha_cita).getTime() - new Date(a.fecha_cita).getTime())
+          : []
+      );
 
-        if (diasRes.ok) {
-          const diasData = await diasRes.json();
-          setDiasDisponibles(Array.isArray(diasData) ? diasData : []);
-        } else {
-          setMensajeDias({ tipo: 'error', texto: 'Error al cargar las fechas disponibles. Por favor, intenta de nuevo.' });
-        }
-
-        setCitas(citasData.sort((a: Cita, b: Cita) => new Date(b.fecha_cita).getTime() - new Date(a.fecha_cita).getTime()));
-        
-        const usuariosMap: Record<number, Usuario> = {};
+      const usuariosMap: Record<number, Usuario> = {};
+      if (Array.isArray(usuariosData)) {
         usuariosData.forEach((u: Usuario) => {
           usuariosMap[u.id] = u;
         });
-        setUsuarios(usuariosMap);
-      } catch {
-        setError('Error de conexión. Por favor, intenta de nuevo.');
-      } finally {
-        setLoading(false);
       }
-    };
+      setUsuarios(usuariosMap);
+      setError('');
+    } catch {
+      setError('Error al cargar la información de la agenda.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchData();
   }, [router]);
 
@@ -111,7 +111,7 @@ export default function AgendaAdminPage() {
       if (res.ok) {
         setDiasDisponibles((prev) => [...prev, nuevaFecha].sort());
         setNuevaFecha('');
-        setMensajeDias({ tipo: 'ok', texto: 'Fecha habilitada correctamente.' });
+        setMensajeDias({ tipo: 'ok', texto: 'Fecha habilitada correctamente para citas.' });
       } else {
         setMensajeDias({ tipo: 'error', texto: data.error || `Error (${res.status})` });
       }
@@ -137,7 +137,7 @@ export default function AgendaAdminPage() {
         setMensajeDias({ tipo: 'error', texto: data.error || `Error (${res.status})` });
       }
     } catch {
-      setMensajeDias({ tipo: 'error', texto: 'Error de conexión al deshabilitar la fecha.' });
+      setMensajeDias({ tipo: 'error', texto: 'Error al deshabilitar la fecha.' });
     } finally {
       setConfirmFecha(null);
     }
@@ -146,7 +146,7 @@ export default function AgendaAdminPage() {
   const fechaParaDisplay = (fecha: string) => {
     const d = new Date(`${fecha}T12:00:00`);
     if (Number.isNaN(d.getTime())) return fecha;
-    return d.toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' });
+    return d.toLocaleDateString('es-CO', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
   };
 
   const handleActualizarEstado = async (citaId: number, nuevoEstado: string) => {
@@ -172,9 +172,6 @@ export default function AgendaAdminPage() {
 
       if (res.ok) {
         setCitas(citas.map(c => c.id === citaId ? { ...c, estado: nuevoEstado as Cita['estado'] } : c));
-      } else {
-        const err = await res.json().catch(() => ({}));
-        console.error('Failed to update cita:', res.status, err);
       }
     } catch (error) {
       console.error('Error actualizando estado:', error);
@@ -206,409 +203,357 @@ export default function AgendaAdminPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#101828' }}>
-        <div className="text-white text-xl">Cargando agenda...</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen" style={{ backgroundColor: '#101828' }}>
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <div className="flex justify-between items-center mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-white">Agenda de Citas</h1>
-            </div>
-            <Link
-              href="/admin"
-              className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors"
-            >
-              ← Volver al Panel
-            </Link>
-          </div>
-          <div className="bg-red-900/20 border border-red-700 rounded-lg p-6">
-            <p className="text-red-400 text-lg">{error}</p>
-            <p className="text-red-300 text-sm mt-2">Por favor, verifica la consola del navegador para más detalles.</p>
-          </div>
-        </div>
+      <div className="flex flex-col items-center justify-center py-24 text-gray-400 space-y-3">
+        <span className="material-symbols-outlined text-4xl animate-spin text-cyan-500">sync</span>
+        <p className="text-base font-medium">Cargando agenda de citas...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#101828' }}>
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-white">Agenda de Citas</h1>
-            <p className="text-gray-400 mt-2">Total de citas: {citas.length}</p>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+      {/* ── ENCABEZADO DE SECCIÓN ESTILO YOUTUBE STUDIO ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-800/80">
+        <div>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/30">
+              Calendario y Atención
+            </span>
+            <span className="text-xs text-gray-500">•</span>
+            <span className="text-xs text-gray-400 font-medium">{citas.length} citas registradas</span>
           </div>
-          <Link
-            href="/admin"
-            className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            ← Volver al Panel
-          </Link>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
+            <span className="material-symbols-outlined text-rose-400 text-3xl">calendar_month</span>
+            Agenda de Citas
+          </h1>
+          <p className="text-xs sm:text-sm text-gray-400 mt-1">
+            Habilita días laborales para citas y administra las solicitudes de medición, entrega y consultas.
+          </p>
         </div>
 
-        {/* Días disponibles */}
-        <div className="bg-slate-800 rounded-lg p-5 mb-6">
-          <h2 className="text-lg font-semibold text-white mb-1">Fechas disponibles para agendar</h2>
-          <p className="text-sm text-gray-400 mb-4">
-            Solo en estas fechas los usuarios podrán crear citas (lunes a viernes, 8:00 a. m. a 5:00 p. m.).
-          </p>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={fetchData}
+            title="Recargar agenda"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-gray-700/80 transition-colors cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-base">refresh</span>
+            <span>Actualizar</span>
+          </button>
+        </div>
+      </div>
 
-          {mensajeDias && (
-            <div className={`mb-3 p-3 rounded-lg text-sm ${mensajeDias.tipo === 'ok' ? 'bg-green-900/40 border border-green-700 text-green-200' : 'bg-red-900/40 border border-red-700 text-red-200'}`}>
-              {mensajeDias.texto}
+      {error && (
+        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300 flex items-center gap-2">
+          <span className="material-symbols-outlined text-rose-400">error</span>
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* ── CARD: HABILITAR FECHAS DISPONIBLES ── */}
+      <div className="rounded-2xl border border-gray-800/80 bg-[#141b28] p-5 sm:p-6 shadow-xl space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-gray-800">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+              <span className="material-symbols-outlined text-xl">event_available</span>
             </div>
-          )}
-
-          <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <input
-              type="date"
-              value={nuevaFecha}
-              onChange={(e) => setNuevaFecha(e.target.value)}
-              className="min-h-[44px] flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              onClick={handleAgregarFecha}
-              className="min-h-[44px] inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-lg transition-colors font-medium"
-            >
-              + Habilitar fecha
-            </button>
+            <div>
+              <h2 className="text-sm font-bold text-white">Fechas Habilitadas para Agendar</h2>
+              <p className="text-xs text-gray-400">Solo en estos días los clientes pueden solicitar citas desde la tienda.</p>
+            </div>
           </div>
+          <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-white/5 border border-gray-700 text-gray-300">
+            {diasDisponibles.length} días activos
+          </span>
+        </div>
 
+        {mensajeDias && (
+          <div
+            className={`p-3 rounded-xl text-xs flex items-center justify-between gap-2 ${
+              mensajeDias.tipo === 'ok'
+                ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
+                : 'bg-rose-500/10 border border-rose-500/30 text-rose-300'
+            }`}
+          >
+            <div className="flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-sm">
+                {mensajeDias.tipo === 'ok' ? 'check_circle' : 'error'}
+              </span>
+              <span>{mensajeDias.texto}</span>
+            </div>
+            <button onClick={() => setMensajeDias(null)} className="text-gray-400 hover:text-white">✕</button>
+          </div>
+        )}
+
+        {/* Input para agregar fecha */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="date"
+            value={nuevaFecha}
+            min={new Date().toISOString().split('T')[0]}
+            onChange={(e) => setNuevaFecha(e.target.value)}
+            className="flex-1 rounded-xl border border-gray-700/80 bg-[#0f141f] text-white px-3.5 py-2 text-sm focus:outline-none focus:border-cyan-500"
+          />
+          <button
+            onClick={handleAgregarFecha}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-md transition-all cursor-pointer shrink-0"
+          >
+            <span className="material-symbols-outlined text-base">add</span>
+            <span>Habilitar Día</span>
+          </button>
+        </div>
+
+        {/* Lista de chips de fechas habilitadas */}
+        <div className="pt-2">
           {diasDisponibles.length === 0 ? (
-            <p className="text-sm text-gray-400">No hay fechas habilitadas. Agrega fechas para que los usuarios puedan agendar.</p>
+            <p className="text-xs text-gray-500 italic">No hay días habilitados. Agrega una fecha arriba para habilitar reservas.</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {diasDisponibles.map((fecha) => (
-                <span key={fecha} className="inline-flex items-center gap-2 bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-gray-200">
-                  {fechaParaDisplay(fecha)}
+                <div
+                  key={fecha}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#0f141f] border border-gray-700/80 px-3 py-1.5 text-xs text-gray-200 shadow-xs"
+                >
+                  <span className="material-symbols-outlined text-sm text-cyan-400">calendar_today</span>
+                  <span className="font-medium capitalize">{fechaParaDisplay(fecha)}</span>
+
                   {confirmFecha === fecha ? (
-                    <>
-                      <span className="text-xs text-gray-400">¿Deshabilitar?</span>
-                      <button
-                        onClick={() => setConfirmFecha(null)}
-                        className="text-xs text-gray-400 hover:text-gray-200 font-semibold ml-1"
-                      >
-                        Cancelar
-                      </button>
+                    <div className="inline-flex items-center gap-1.5 ml-1 border-l border-gray-700 pl-1.5">
+                      <span className="text-[10px] text-gray-400">¿Quitar?</span>
                       <button
                         onClick={() => handleEliminarFecha(fecha)}
-                        className="text-xs text-red-300 hover:text-red-200 font-bold ml-1"
+                        className="text-[10px] text-rose-400 hover:text-rose-300 font-bold"
                       >
                         Sí
                       </button>
-                    </>
+                      <button
+                        onClick={() => setConfirmFecha(null)}
+                        className="text-[10px] text-gray-400 hover:text-white"
+                      >
+                        No
+                      </button>
+                    </div>
                   ) : (
                     <button
                       onClick={() => setConfirmFecha(fecha)}
-                      className="text-red-400 hover:text-red-300 font-bold ml-1"
+                      className="text-gray-500 hover:text-rose-400 transition-colors p-0.5"
                       title="Deshabilitar fecha"
                     >
                       ✕
                     </button>
                   )}
-                </span>
+                </div>
               ))}
             </div>
           )}
         </div>
-
-        {/* Filtros */}
-        <div className="bg-slate-800 p-4 rounded-lg mb-6 flex gap-2 flex-wrap">
-          <button
-            onClick={() => setFiltro('todas')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              filtro === 'todas'
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-            }`}
-          >
-            Todas ({citas.length})
-          </button>
-          <button
-            onClick={() => setFiltro('pendiente')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              filtro === 'pendiente'
-                ? 'bg-yellow-600 text-white'
-                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-            }`}
-          >
-            Pendiente ({citas.filter(c => c.estado === 'pendiente').length})
-          </button>
-          <button
-            onClick={() => setFiltro('confirmada')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              filtro === 'confirmada'
-                ? 'bg-green-600 text-white'
-                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-            }`}
-          >
-            Confirmada ({citas.filter(c => c.estado === 'confirmada').length})
-          </button>
-          <button
-            onClick={() => setFiltro('realizada')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              filtro === 'realizada'
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-            }`}
-          >
-            Realizada ({citas.filter(c => c.estado === 'realizada').length})
-          </button>
-          <button
-            onClick={() => setFiltro('cancelada')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              filtro === 'cancelada'
-                ? 'bg-red-600 text-white'
-                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-            }`}
-          >
-            Cancelada ({citas.filter(c => c.estado === 'cancelada').length})
-          </button>
-        </div>
-
-        {/* Tabla / Tarjetas de citas */}
-        <div className="bg-slate-800 rounded-lg overflow-hidden">
-          {citasFiltradas.length === 0 ? (
-            <div className="p-8 text-center text-gray-400">
-              <p className="text-lg">No hay citas para mostrar</p>
-            </div>
-          ) : (
-            <>
-              {/* Vista de tarjetas para Móvil (< md) */}
-              <div className="block md:hidden p-4 space-y-4">
-                {citasFiltradas.map((cita) => (
-                  <div key={cita.id} className="bg-slate-900 border border-slate-700/80 rounded-2xl p-4 space-y-3 shadow-md">
-                    {/* Header de la tarjeta: Tipo y Estado */}
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-800 text-gray-300 text-xs font-semibold border border-slate-700">
-                        <span>{tiposIconos[cita.tipo]}</span>
-                        <span className="capitalize">{cita.tipo}</span>
-                      </span>
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${estadoColores[cita.estado]}`}>
-                        {cita.estado}
-                      </span>
-                    </div>
-
-                    {/* Título y Descripción */}
-                    <div>
-                      <h3 className="text-white font-bold text-base leading-snug">{cita.titulo}</h3>
-                      {cita.descripcion && (
-                        <p className="text-xs text-gray-400 mt-1 break-words">{cita.descripcion}</p>
-                      )}
-                    </div>
-
-                    {/* Usuario y Correo */}
-                    <div className="text-xs border-t border-slate-800 pt-2.5 space-y-1">
-                      <p className="text-gray-200 font-medium">
-                        <span className="text-gray-400">Usuario: </span>
-                        {usuarios[cita.usuario_id]?.nombre || 'Usuario'}
-                      </p>
-                      {usuarios[cita.usuario_id]?.email && (
-                        <p className="text-gray-400 truncate">
-                          <span className="text-gray-400">Email: </span>
-                          {usuarios[cita.usuario_id]?.email}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Fecha y Hora */}
-                    <div className="text-xs text-gray-300 flex items-center gap-1.5 pt-1">
-                      <span>📅</span>
-                      <span>
-                        {new Date(cita.fecha_cita).toLocaleDateString('es-ES', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </span>
-                    </div>
-
-                    {/* Botón Acciones */}
-                    <div className="pt-2 border-t border-slate-800/80">
-                      <button
-                        onClick={() => setMobileActionCita(cita)}
-                        className="w-full min-h-[44px] flex items-center justify-center gap-2 rounded-xl bg-gray-700 hover:bg-gray-600 px-4 py-2.5 text-white transition-colors border border-gray-600 font-semibold text-sm shadow-sm"
-                      >
-                        <span className="material-symbols-outlined text-sm">settings</span>
-                        Acciones
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Vista de Tabla para Escritorio y Tablet (>= md) */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-slate-900 border-b border-slate-700">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-300">Tipo</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-300">Título</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-300">Usuario</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-300">Fecha</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-300">Estado</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-300">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {citasFiltradas.map((cita) => (
-                      <tr key={cita.id} className="border-b border-slate-700 hover:bg-slate-700/50 transition">
-                        <td className="px-6 py-4 text-gray-300">{tiposIconos[cita.tipo]} {cita.tipo}</td>
-                        <td className="px-6 py-4">
-                          <div className="text-white font-medium">{cita.titulo}</div>
-                          {cita.descripcion && (
-                            <div className="text-sm text-gray-400">{cita.descripcion}</div>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-white">{usuarios[cita.usuario_id]?.nombre || 'Usuario'}</div>
-                          <div className="text-sm text-gray-400">{usuarios[cita.usuario_id]?.email}</div>
-                        </td>
-                        <td className="px-6 py-4 text-gray-300">
-                          {new Date(cita.fecha_cita).toLocaleDateString('es-ES', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </td>
-                        <td className="px-6 py-4">
-                          <select
-                            value={cita.estado}
-                            onChange={(e) => handleActualizarEstado(cita.id, e.target.value)}
-                            className={`px-3 py-2 rounded text-sm font-medium ${estadoColores[cita.estado]} bg-transparent border border-current w-full min-h-[44px]`}
-                          >
-                            <option value="pendiente" className="bg-slate-800 text-white">Pendiente</option>
-                            <option value="confirmada" className="bg-slate-800 text-white">Confirmada</option>
-                            <option value="realizada" className="bg-slate-800 text-white">Realizada</option>
-                            <option value="cancelada" className="bg-slate-800 text-white">Cancelada</option>
-                          </select>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="hidden md:block">
-                            {confirmCitaId === cita.id ? (
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => setConfirmCitaId(null)}
-                                  className="text-gray-400 hover:text-gray-200 text-sm"
-                                >
-                                  Cancelar
-                                </button>
-                                <button
-                                  onClick={() => handleEliminarCita(cita.id)}
-                                  className="text-red-300 hover:text-red-200 text-sm font-semibold"
-                                >
-                                  Sí, eliminar
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => setConfirmCitaId(cita.id)}
-                                className="text-red-400 hover:text-red-300 text-sm font-medium transition-colors"
-                              >
-                                Eliminar
-                              </button>
-                            )}
-                          </div>
-                          <div className="md:hidden">
-                            <button
-                              onClick={() => setMobileActionCita(cita)}
-                              className="w-full min-h-[44px] flex items-center justify-center gap-2 rounded-lg bg-gray-700 hover:bg-gray-600 px-4 py-2 text-white transition-colors border border-gray-600"
-                            >
-                              <span className="material-symbols-outlined text-sm">settings</span>
-                              Acciones
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </div>
       </div>
 
-      {/* Modal de acciones para móvil */}
-      {mobileActionCita && (
-        <div className="fixed inset-0 bg-black/80 flex items-end sm:items-center justify-center z-[60] p-4 overflow-y-auto">
-          <div className="rounded-2xl shadow-2xl w-full max-w-md mx-auto my-auto overflow-hidden border border-slate-700" style={{ backgroundColor: '#1e2939' }}>
-            <div className="p-5 sm:p-6">
-              <div className="flex justify-between items-center mb-5 border-b border-gray-700 pb-4">
-                <div>
-                  <h2 className="text-xl font-bold text-white">Acciones de Cita</h2>
-                  <p className="text-gray-400 text-sm truncate max-w-[220px]">{mobileActionCita.titulo}</p>
+      {/* ── CHIPS DE FILTRO POR ESTADO (ESTILO YOUTUBE) ── */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        <span className="text-xs text-gray-400 font-medium mr-1 shrink-0">Filtrar:</span>
+        {[
+          { id: 'todas', label: `Todas (${citas.length})` },
+          { id: 'pendiente', label: `Pendientes (${citas.filter(c => c.estado === 'pendiente').length})` },
+          { id: 'confirmada', label: `Confirmadas (${citas.filter(c => c.estado === 'confirmada').length})` },
+          { id: 'realizada', label: `Realizadas (${citas.filter(c => c.estado === 'realizada').length})` },
+          { id: 'cancelada', label: `Canceladas (${citas.filter(c => c.estado === 'cancelada').length})` },
+        ].map((btn) => {
+          const active = filtro === btn.id;
+          return (
+            <button
+              key={btn.id}
+              onClick={() => setFiltro(btn.id)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+                active
+                  ? 'bg-rose-500 text-white shadow-xs font-bold'
+                  : 'bg-white/5 hover:bg-white/10 text-gray-300 border border-gray-800'
+              }`}
+            >
+              {btn.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── LISTADO / TABLA DE CITAS ── */}
+      {citasFiltradas.length === 0 ? (
+        <div className="rounded-2xl border border-gray-800 bg-[#141b28] p-12 text-center">
+          <span className="material-symbols-outlined text-5xl text-gray-600 mb-2">event_busy</span>
+          <p className="text-gray-300 text-base font-semibold">No hay citas para mostrar</p>
+          <p className="text-gray-500 text-xs mt-1">Prueba seleccionando otro filtro o espera nuevas reservas.</p>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-gray-800/80 bg-[#141b28] shadow-xl overflow-hidden">
+          {/* Vista Escritorio / Tablet (>= md) */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full min-w-[850px] text-left">
+              <thead className="bg-[#182233] border-b border-gray-800 text-gray-400 text-[11px] font-bold uppercase tracking-wider">
+                <tr>
+                  <th className="px-6 py-3.5">Tipo</th>
+                  <th className="px-6 py-3.5">Detalle / Asunto</th>
+                  <th className="px-6 py-3.5">Usuario</th>
+                  <th className="px-6 py-3.5">Fecha y Hora</th>
+                  <th className="px-6 py-3.5">Estado</th>
+                  <th className="px-6 py-3.5 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800/70 text-sm">
+                {citasFiltradas.map((cita) => (
+                  <tr key={cita.id} className="hover:bg-white/[0.02] transition-colors group">
+                    {/* Tipo con icono */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/5 border border-gray-700/60 text-xs font-semibold text-gray-300 capitalize">
+                        <span className="material-symbols-outlined text-base text-cyan-400">
+                          {tiposIconos[cita.tipo] || 'event'}
+                        </span>
+                        {cita.tipo}
+                      </span>
+                    </td>
+
+                    {/* Título y descripción */}
+                    <td className="px-6 py-4">
+                      <p className="font-semibold text-white group-hover:text-cyan-400 transition-colors">
+                        {cita.titulo}
+                      </p>
+                      {cita.descripcion && (
+                        <p className="text-xs text-gray-400 line-clamp-1 mt-0.5">{cita.descripcion}</p>
+                      )}
+                    </td>
+
+                    {/* Usuario */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <p className="text-xs font-semibold text-white">
+                        {usuarios[cita.usuario_id]?.nombre || 'Usuario Registrado'}
+                      </p>
+                      <p className="text-[11px] text-gray-400">{usuarios[cita.usuario_id]?.email}</p>
+                    </td>
+
+                    {/* Fecha */}
+                    <td className="px-6 py-4 text-xs text-gray-300 whitespace-nowrap font-medium">
+                      {new Date(cita.fecha_cita).toLocaleDateString('es-CO', {
+                        weekday: 'short',
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </td>
+
+                    {/* Selector de Estado */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <select
+                        value={cita.estado}
+                        onChange={(e) => handleActualizarEstado(cita.id, e.target.value)}
+                        className={`px-2.5 py-1 rounded-xl text-xs font-semibold border ${estadoColores[cita.estado]} bg-[#0f141f] focus:outline-none cursor-pointer`}
+                      >
+                        <option value="pendiente">Pendiente</option>
+                        <option value="confirmada">Confirmada</option>
+                        <option value="realizada">Realizada</option>
+                        <option value="cancelada">Cancelada</option>
+                      </select>
+                    </td>
+
+                    {/* Eliminar cita */}
+                    <td className="px-6 py-4 text-right whitespace-nowrap">
+                      {confirmCitaId === cita.id ? (
+                        <div className="inline-flex items-center gap-2">
+                          <span className="text-[11px] text-rose-300 font-medium">¿Eliminar?</span>
+                          <button
+                            onClick={() => handleEliminarCita(cita.id)}
+                            className="px-2 py-1 rounded text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white"
+                          >
+                            Sí
+                          </button>
+                          <button
+                            onClick={() => setConfirmCitaId(null)}
+                            className="px-1.5 py-1 text-xs text-gray-400 hover:text-white"
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmCitaId(cita.id)}
+                          title="Eliminar cita"
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-lg">delete</span>
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Vista Móvil (< md) */}
+          <div className="block md:hidden p-4 space-y-3">
+            {citasFiltradas.map((cita) => (
+              <div key={cita.id} className="bg-[#0f141f] border border-gray-800 rounded-xl p-4 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-cyan-400 capitalize">
+                    <span className="material-symbols-outlined text-sm">{tiposIconos[cita.tipo] || 'event'}</span>
+                    {cita.tipo}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border ${estadoColores[cita.estado]}`}>
+                    {cita.estado}
+                  </span>
+                </div>
+                <h3 className="text-white font-bold text-sm">{cita.titulo}</h3>
+                {cita.descripcion && <p className="text-xs text-gray-400">{cita.descripcion}</p>}
+                <div className="text-xs text-gray-300 pt-1 border-t border-gray-800/80 flex items-center justify-between">
+                  <span>{usuarios[cita.usuario_id]?.nombre || 'Usuario'}</span>
+                  <span>{new Date(cita.fecha_cita).toLocaleDateString('es-CO')}</span>
                 </div>
                 <button
-                  onClick={() => setMobileActionCita(null)}
-                  className="text-gray-400 hover:text-gray-200 text-3xl min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full hover:bg-gray-800 transition-colors"
+                  onClick={() => setMobileActionCita(cita)}
+                  className="w-full py-2 rounded-lg bg-white/5 border border-gray-700 text-xs font-semibold text-white"
                 >
-                  ×
+                  Gestionar Cita
                 </button>
               </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm text-gray-400 mb-2 font-medium">Cambiar Estado</label>
-                  <select
-                    value={mobileActionCita.estado}
-                    onChange={(e) => {
-                      handleActualizarEstado(mobileActionCita.id, e.target.value);
-                      setMobileActionCita({ ...mobileActionCita, estado: e.target.value as Cita['estado'] });
-                    }}
-                    className={`w-full min-h-[48px] px-3 py-2 rounded-xl font-medium ${estadoColores[mobileActionCita.estado]} bg-transparent border border-current outline-none`}
-                  >
-                    <option value="pendiente" className="bg-slate-800 text-white">Pendiente</option>
-                    <option value="confirmada" className="bg-slate-800 text-white">Confirmada</option>
-                    <option value="realizada" className="bg-slate-800 text-white">Realizada</option>
-                    <option value="cancelada" className="bg-slate-800 text-white">Cancelada</option>
-                  </select>
-                </div>
-
-                <div className="pt-4 border-t border-gray-700">
-                  {confirmCitaId === mobileActionCita.id ? (
-                    <div className="flex flex-col gap-2">
-                      <p className="text-sm text-red-300 text-center">¿Seguro que quieres eliminar esta cita?</p>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setConfirmCitaId(null)}
-                          className="w-full min-h-[48px] rounded-xl text-gray-300 border border-gray-600 hover:bg-gray-800 px-4 font-semibold transition-colors"
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          onClick={() => {
-                            handleEliminarCita(mobileActionCita.id);
-                            setMobileActionCita(null);
-                          }}
-                          className="w-full min-h-[48px] rounded-xl text-red-300 bg-red-900/40 hover:bg-red-900/60 px-4 font-semibold transition-colors border border-red-800/50"
-                        >
-                          Sí, eliminar
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setConfirmCitaId(mobileActionCita.id)}
-                      className="w-full min-h-[48px] flex items-center justify-center gap-2 text-red-400 bg-red-900/30 hover:bg-red-900/50 rounded-xl px-4 text-base font-semibold transition-colors border border-red-800/50"
-                    >
-                      <span className="material-symbols-outlined">delete</span>
-                      Eliminar Cita
-                    </button>
-                  )}
-                </div>
-              </div>
+      {/* ── MODAL ACCIONES MÓVIL ── */}
+      {mobileActionCita && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-end justify-center z-[60] p-4 md:hidden">
+          <div className="w-full rounded-2xl border border-gray-800 bg-[#141b28] p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+              <h3 className="font-bold text-white text-sm">Gestionar Cita</h3>
+              <button onClick={() => setMobileActionCita(null)} className="text-gray-400">✕</button>
             </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-400 mb-1.5">Estado</label>
+              <select
+                value={mobileActionCita.estado}
+                onChange={(e) => {
+                  handleActualizarEstado(mobileActionCita.id, e.target.value);
+                  setMobileActionCita({ ...mobileActionCita, estado: e.target.value as Cita['estado'] });
+                }}
+                className={`w-full py-2 px-3 rounded-xl text-xs font-semibold border ${estadoColores[mobileActionCita.estado]} bg-[#0f141f]`}
+              >
+                <option value="pendiente">Pendiente</option>
+                <option value="confirmada">Confirmada</option>
+                <option value="realizada">Realizada</option>
+                <option value="cancelada">Cancelada</option>
+              </select>
+            </div>
+            <button
+              onClick={() => {
+                handleEliminarCita(mobileActionCita.id);
+                setMobileActionCita(null);
+              }}
+              className="w-full py-2 rounded-xl text-xs font-bold bg-rose-600/20 text-rose-300 border border-rose-500/30 flex items-center justify-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-base">delete</span>
+              Eliminar Cita
+            </button>
           </div>
         </div>
       )}

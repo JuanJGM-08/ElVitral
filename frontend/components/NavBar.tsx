@@ -103,6 +103,10 @@ function Navbar() {
 
   const userInitial = user?.nombre ? user.nombre.charAt(0).toUpperCase() : 'U';
 
+  if (pathname?.startsWith('/admin')) {
+    return null;
+  }
+
   return (
     <nav className="sticky top-0 z-50 bg-[#0d131f]/90 backdrop-blur-xl border-b border-gray-800/80 shadow-xl shadow-black/25 transition-all">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

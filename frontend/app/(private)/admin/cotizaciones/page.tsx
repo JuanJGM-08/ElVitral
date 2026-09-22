@@ -43,40 +43,31 @@ export default function AdminCotizacionesPage() {
   const [selectedCotizacion, setSelectedCotizacion] = useState<CotizacionDetalle | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [convertingId, setConvertingId] = useState<number | null>(null);
+  const [filterStatus, setFilterStatus] = useState('todas');
   
   // Mobile actions
   const [mobileActionCotizacion, setMobileActionCotizacion] = useState<Cotizacion | null>(null);
 
-  // Estado para el modal de confirmación
+  // Modales
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [cotizacionToConvert, setCotizacionToConvert] = useState<Cotizacion | CotizacionDetalle | null>(null);
   const [cotizacionToReject, setCotizacionToReject] = useState<CotizacionDetalle | null>(null);
-
-  // Estados para modales de resultado
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
 
   const fetchCotizaciones = async () => {
     try {
-      const res = await fetch('/api/admin/cotizaciones', {
-        credentials: 'include'
-      });
-
+      const res = await fetch('/api/admin/cotizaciones', { credentials: 'include' });
       if (!res.ok) {
         const errorData = await res.json().catch(() => null);
-        setError(errorData?.error || `Error en la respuesta: ${res.status} ${res.statusText}`);
+        setError(errorData?.error || `Error: ${res.status} ${res.statusText}`);
         setCotizaciones([]);
         return;
       }
 
       const data = await res.json();
-      if (!Array.isArray(data)) {
-        setError('Datos de cotizaciones inválidos');
-        setCotizaciones([]);
-      } else {
-        setCotizaciones(data);
-      }
+      setCotizaciones(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error al cargar cotizaciones:', err);
       setError('Error al cargar cotizaciones');
@@ -145,8 +136,8 @@ export default function AdminCotizacionesPage() {
         closeModal();
         fetchCotizaciones();
       } else {
-        const error = await res.json();
-        setModalMessage(error.error || 'Error al convertir la cotización');
+        const errorData = await res.json();
+        setModalMessage(errorData.error || 'Error al convertir la cotización');
         setShowErrorModal(true);
       }
     } catch (error) {
@@ -181,247 +172,311 @@ export default function AdminCotizacionesPage() {
     }
   };
 
+  const filteredCotizaciones = filterStatus === 'todas'
+    ? cotizaciones
+    : cotizaciones.filter(c => c.estado?.toLowerCase() === filterStatus.toLowerCase());
+
+  const getStatusBadge = (estado: string) => {
+    switch (estado?.toLowerCase()) {
+      case 'vigente':
+        return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+      case 'aprobada':
+        return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30';
+      case 'convertida':
+        return 'bg-purple-500/10 text-purple-400 border-purple-500/30';
+      case 'rechazada':
+        return 'bg-rose-500/10 text-rose-400 border-rose-500/30';
+      default:
+        return 'bg-gray-700/40 text-gray-400 border-gray-700';
+    }
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen" style={{ backgroundColor: '#101828'}}>
-        <div className="max-w-7xl mx-auto px-4 py-12">
-          <div className="flex justify-between items-center mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-white">Gestión de Cotizaciones</h1>
-              <p className="text-gray-300 mt-1">Cargando cotizaciones desde la base de datos...</p>
-            </div>
-            <Link
-            href="/admin"
-            className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            ← Volver al Panel
-          </Link>
-          </div>
-          <div className="flex items-center justify-center py-16">
-            <div className="text-white text-xl">Cargando cotizaciones...</div>
-          </div>
-        </div>
+      <div className="flex flex-col items-center justify-center py-24 text-gray-400 space-y-3">
+        <span className="material-symbols-outlined text-4xl animate-spin text-cyan-500">sync</span>
+        <p className="text-base font-medium">Cargando cotizaciones...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#101828'}}>
-      <div className="max-w-7xl mx-auto px-4 py-12">
-        <div className="flex justify-between items-start gap-4 mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-white">Gestión de Cotizaciones</h1>
-            <p className="text-gray-300 mt-1">Se muestran todas las cotizaciones de la base de datos.</p>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+      {/* ── ENCABEZADO DE SECCIÓN ESTILO YOUTUBE STUDIO ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-800/80">
+        <div>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30">
+              Presupuestos de Clientes
+            </span>
+            <span className="text-xs text-gray-500">•</span>
+            <span className="text-xs text-gray-400 font-medium">{cotizaciones.length} solicitudes</span>
           </div>
-
-          <Link
-            href="/admin"
-            className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            ← Volver al Panel
-          </Link>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
+            <span className="material-symbols-outlined text-amber-400 text-3xl">request_quote</span>
+            Gestión de Cotizaciones
+          </h1>
+          <p className="text-xs sm:text-sm text-gray-400 mt-1">
+            Consulta detalles de medidas, convierte cotizaciones a pedidos o descarga el PDF oficial.
+          </p>
         </div>
 
-        {error ? (
-          <div className="rounded-lg bg-red-900/30 border border-red-500 p-6 text-red-200">
-            {error}
-          </div>
-        ) : cotizaciones.length === 0 ? (
-          <div className="rounded-lg p-10 text-center" style={{ backgroundColor: '#1e2939' }}>
-            <p className="text-gray-300 text-lg">No hay cotizaciones registradas</p>
-          </div>
-        ) : (
-          <div className="rounded-lg shadow-sm overflow-hidden" style={{ backgroundColor: '#1e2939'}}>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-800">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                      Código
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                      Cliente
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                      Email
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                      Fecha
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                      Total
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                      Estado
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                      Acciones
-                    </th>
-                  </tr>
-                </thead>
-
-                <tbody className="divide-y divide-gray-700">
-                  {cotizaciones.map((cotizacion) => (
-                    <tr key={cotizacion.id} className="hover:bg-gray-800/50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
-                        {cotizacion.codigo_unico}
-                      </td>
-
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {cotizacion.nombre_cliente}
-                      </td>
-
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {cotizacion.email_cliente}
-                      </td>
-
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {new Date(cotizacion.fecha_cotizacion).toLocaleDateString()}
-                      </td>
-
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        ${formatNumber(cotizacion.total)}
-                      </td>
-
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                            cotizacion.estado === 'vigente'
-                              ? 'bg-green-900/50  text-green-300'
-                              : cotizacion.estado === 'aprobada'
-                              ? 'bg-blue-900/50  text-blue-300'
-                              : cotizacion.estado === 'convertida'
-                              ? 'bg-purple-900/50  text-purple-300'
-                              : 'bg-red-900/50  text-red-300'
-                          }`}
-                        >
-                          {cotizacion.estado}
-                        </span>
-                      </td>
-
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="hidden md:block space-x-3">
-                          <button
-                            onClick={() => descargarPdfCotizacion(cotizacion.id)}
-                            className="text-cyan-400 hover:text-cyan-300"
-                          >
-                            Exportar PDF
-                          </button>
-                          <button
-                            onClick={() => verDetalles(cotizacion.codigo_unico)}
-                            className="text-blue-400 hover:text-blue-300"
-                          >
-                            Ver Detalles
-                          </button>
-                        </div>
-                        <div className="md:hidden">
-                          <button
-                            onClick={() => setMobileActionCotizacion(cotizacion)}
-                            className="w-full min-h-[44px] flex items-center justify-center gap-2 rounded-lg bg-gray-700 hover:bg-gray-600 px-4 py-2 text-white transition-colors border border-gray-600"
-                          >
-                            <span className="material-symbols-outlined text-sm">settings</span>
-                            Acciones
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={fetchCotizaciones}
+            title="Recargar cotizaciones"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-gray-700/80 transition-colors cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-base">refresh</span>
+            <span>Actualizar</span>
+          </button>
+        </div>
       </div>
 
-      {/* Modal de detalles */}
+      {error && (
+        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300 flex items-center gap-2">
+          <span className="material-symbols-outlined text-rose-400">error</span>
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* ── CHIPS DE FILTRO POR ESTADO (ESTILO YOUTUBE) ── */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        <span className="text-xs text-gray-400 font-medium mr-1 shrink-0">Filtrar:</span>
+        {['todas', 'vigente', 'aprobada', 'convertida', 'rechazada'].map((st) => {
+          const active = filterStatus === st;
+          return (
+            <button
+              key={st}
+              onClick={() => setFilterStatus(st)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize transition-all shrink-0 cursor-pointer ${
+                active
+                  ? 'bg-amber-500 text-black shadow-xs font-bold'
+                  : 'bg-white/5 hover:bg-white/10 text-gray-300 border border-gray-800'
+              }`}
+            >
+              {st}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── TABLA DE COTIZACIONES ── */}
+      {filteredCotizaciones.length === 0 ? (
+        <div className="rounded-2xl border border-gray-800 bg-[#141b28] p-12 text-center">
+          <span className="material-symbols-outlined text-5xl text-gray-600 mb-2">request_quote</span>
+          <p className="text-gray-300 text-base font-semibold">No se encontraron cotizaciones</p>
+          <p className="text-gray-500 text-xs mt-1">Las cotizaciones creadas por los clientes aparecerán aquí.</p>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-gray-800/80 bg-[#141b28] shadow-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px] text-left">
+              <thead className="bg-[#182233] border-b border-gray-800 text-gray-400 text-[11px] font-bold uppercase tracking-wider">
+                <tr>
+                  <th className="px-6 py-3.5">Código</th>
+                  <th className="px-6 py-3.5">Cliente</th>
+                  <th className="px-6 py-3.5">Fecha</th>
+                  <th className="px-6 py-3.5">Total</th>
+                  <th className="px-6 py-3.5">Estado</th>
+                  <th className="px-6 py-3.5 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800/70 text-sm">
+                {filteredCotizaciones.map((cotizacion) => (
+                  <tr key={cotizacion.id} className="hover:bg-white/[0.02] transition-colors group">
+                    {/* Código */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="font-mono text-xs font-bold text-cyan-400 px-2.5 py-1 rounded-lg bg-cyan-950/60 border border-cyan-500/30">
+                        {cotizacion.codigo_unico}
+                      </span>
+                    </td>
+
+                    {/* Cliente y correo */}
+                    <td className="px-6 py-4">
+                      <div>
+                        <p className="font-semibold text-white group-hover:text-cyan-400 transition-colors">
+                          {cotizacion.nombre_cliente}
+                        </p>
+                        <p className="text-xs text-gray-400">{cotizacion.email_cliente}</p>
+                      </div>
+                    </td>
+
+                    {/* Fecha */}
+                    <td className="px-6 py-4 text-xs text-gray-400 whitespace-nowrap">
+                      {new Date(cotizacion.fecha_cotizacion).toLocaleDateString('es-CO', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </td>
+
+                    {/* Total */}
+                    <td className="px-6 py-4 font-mono font-bold text-white whitespace-nowrap">
+                      ${formatNumber(cotizacion.total)} COP
+                    </td>
+
+                    {/* Estado */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold border capitalize ${getStatusBadge(
+                          cotizacion.estado
+                        )}`}
+                      >
+                        {cotizacion.estado}
+                      </span>
+                    </td>
+
+                    {/* Botones de acción */}
+                    <td className="px-6 py-4 text-right">
+                      <div className="hidden md:flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => descargarPdfCotizacion(cotizacion.id)}
+                          title="Descargar PDF"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-cyan-400 border border-gray-700/80 transition-colors cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-base">picture_as_pdf</span>
+                          <span>PDF</span>
+                        </button>
+                        <button
+                          onClick={() => verDetalles(cotizacion.codigo_unico)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white/5 hover:bg-cyan-500/10 text-white hover:text-cyan-400 border border-gray-700/80 hover:border-cyan-500/40 transition-colors cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-base">visibility</span>
+                          <span>Detalles</span>
+                        </button>
+                      </div>
+                      <div className="md:hidden">
+                        <button
+                          onClick={() => setMobileActionCotizacion(cotizacion)}
+                          className="px-3 py-1.5 rounded-lg bg-white/5 border border-gray-700 text-xs text-white"
+                        >
+                          Opciones
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL DE DETALLES DE COTIZACIÓN ── */}
       {showModal && selectedCotizacion && (
-        <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div
-            className="rounded-2xl sm:rounded-3xl shadow-2xl max-w-4xl w-full flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] my-auto overflow-hidden border border-gray-700/50"
-            style={{ backgroundColor: '#1e2939' }}
-          >
-            {/* Header */}
-            <div className="flex justify-between items-center px-4 sm:px-6 py-3.5 sm:py-4 border-b border-gray-700 shrink-0">
-              <h2 className="text-xl sm:text-2xl font-bold text-white">Detalle de cotización</h2>
-              <button
-                onClick={closeModal}
-                className="text-gray-400 hover:text-gray-200 text-2xl p-1 leading-none"
-              >
-                ×
-              </button>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="max-w-3xl w-full rounded-2xl overflow-hidden shadow-2xl bg-[#141b28] border border-gray-800 flex flex-col max-h-[calc(100dvh-2rem)] my-auto animate-in fade-in zoom-in-95 duration-150">
+            {/* Header del modal */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 bg-[#182233] shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
+                  <span className="material-symbols-outlined text-2xl">description</span>
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Detalle de Cotización</h2>
+                  <p className="text-xs text-cyan-400 font-mono">Código: {selectedCotizacion.codigo_unico}</p>
+                </div>
+              </div>
+              <button onClick={closeModal} className="text-gray-400 hover:text-white p-1 rounded-lg">✕</button>
             </div>
 
-            {/* Scrollable Content */}
-            <div className="p-4 sm:p-6 flex-1 overflow-y-auto min-h-0 space-y-4">
-              <div className="space-y-1.5 text-gray-200 text-sm sm:text-base">
-                <p><strong>Código:</strong> {selectedCotizacion.codigo_unico}</p>
-                <p><strong>Cliente:</strong> {selectedCotizacion.nombre_cliente}</p>
-                <p><strong>Email:</strong> {selectedCotizacion.email_cliente}</p>
-                <p><strong>Teléfono:</strong> {selectedCotizacion.telefono_cliente}</p>
-                <p><strong>Dirección:</strong> {selectedCotizacion.direccion_cliente}</p>
-                <p><strong>Fecha:</strong> {new Date(selectedCotizacion.fecha_cotizacion).toLocaleDateString()}</p>
+            {/* Contenido del modal */}
+            <div className="p-6 overflow-y-auto space-y-5">
+              {/* Información del Cliente en Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-xl bg-[#0f141f] border border-gray-800 text-xs">
+                <div>
+                  <span className="text-gray-500">Cliente:</span>
+                  <p className="font-semibold text-white mt-0.5">{selectedCotizacion.nombre_cliente}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Email:</span>
+                  <p className="font-semibold text-white mt-0.5">{selectedCotizacion.email_cliente}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Teléfono:</span>
+                  <p className="font-semibold text-white mt-0.5">{selectedCotizacion.telefono_cliente || 'N/A'}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Dirección:</span>
+                  <p className="font-semibold text-white mt-0.5">{selectedCotizacion.direccion_cliente || 'N/A'}</p>
+                </div>
               </div>
 
-              <h3 className="font-bold text-white text-base sm:text-lg pt-2">Productos</h3>
-              <div className="overflow-x-auto rounded-xl border border-gray-700/60 max-w-full">
-                <table className="w-full text-left min-w-[500px] sm:min-w-full">
-                  <thead className="bg-gray-800">
-                    <tr>
-                      <th className="p-2.5 sm:p-3 text-xs font-semibold text-gray-300 uppercase">Producto</th>
-                      <th className="p-2.5 sm:p-3 text-xs font-semibold text-gray-300 uppercase">Medidas</th>
-                      <th className="p-2.5 sm:p-3 text-xs font-semibold text-gray-300 uppercase">Cantidad</th>
-                      <th className="p-2.5 sm:p-3 text-xs font-semibold text-gray-300 uppercase">Precio</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-700">
-                    {selectedCotizacion.detalles?.map((det: { descripcion: string; medida_largo?: number; medida_ancho?: number; cantidad: number; subtotal: number }, i: number) => (
-                      <tr key={i} className="text-gray-200 text-xs sm:text-sm">
-                        <td className="p-2.5 sm:p-3 font-medium">{det.descripcion}</td>
-                        <td className="p-2.5 sm:p-3">
-                          {det.medida_largo && `${det.medida_largo}x${det.medida_ancho} cm`}
-                        </td>
-                        <td className="p-2.5 sm:p-3">{det.cantidad}</td>
-                        <td className="p-2.5 sm:p-3 font-semibold">${formatNumber(det.subtotal)}</td>
+              {/* Tabla de Artículos Cotizados */}
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">
+                  Artículos y Medidas
+                </h3>
+                <div className="rounded-xl border border-gray-800 overflow-hidden bg-[#0f141f]">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#182233] text-gray-400 uppercase font-semibold">
+                      <tr>
+                        <th className="p-3">Descripción</th>
+                        <th className="p-3">Medidas</th>
+                        <th className="p-3">Cantidad</th>
+                        <th className="p-3 text-right">Subtotal</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800 text-gray-200">
+                      {selectedCotizacion.detalles?.map((det, idx) => (
+                        <tr key={idx}>
+                          <td className="p-3 font-medium text-white">{det.descripcion}</td>
+                          <td className="p-3 text-gray-400">
+                            {det.medida_largo && det.medida_ancho ? `${det.medida_largo} × ${det.medida_ancho} cm` : 'Estándar'}
+                          </td>
+                          <td className="p-3 font-mono">{det.cantidad}</td>
+                          <td className="p-3 text-right font-mono font-semibold text-white">
+                            ${formatNumber(det.subtotal)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Total Destacado */}
+              <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/30">
+                <span className="text-sm font-semibold text-amber-300">Total Cotizado:</span>
+                <span className="text-2xl font-black font-mono text-white">
+                  ${formatNumber(selectedCotizacion.total)} COP
+                </span>
               </div>
             </div>
 
-            {/* Footer */}
-            <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-t border-gray-700 shrink-0 bg-[#1e2939] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div className="text-left">
-                <p className="text-lg sm:text-xl font-bold text-primary">Total: ${formatNumber(selectedCotizacion.total)}</p>
-              </div>
+            {/* Footer de Acciones */}
+            <div className="flex flex-wrap items-center justify-between gap-2.5 p-4 border-t border-gray-800 bg-[#182233] shrink-0">
+              <button
+                onClick={() => descargarPdfCotizacion(selectedCotizacion.id)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-cyan-300 border border-gray-700/80 transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-base">picture_as_pdf</span>
+                <span>Exportar PDF</span>
+              </button>
 
-              <div className="flex flex-wrap gap-2 justify-end items-center">
-                <button
-                  onClick={() => descargarPdfCotizacion(selectedCotizacion.id)}
-                  className="bg-cyan-600 hover:bg-cyan-700 text-white px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors flex-1 sm:flex-none text-center"
-                >
-                  Exportar PDF
-                </button>
-                {selectedCotizacion.estado !== 'convertida' && (
+              <div className="flex items-center gap-2">
+                {selectedCotizacion.estado !== 'convertida' && selectedCotizacion.estado !== 'rechazada' && (
                   <>
-                  <button
-                    onClick={() => setCotizacionToReject(selectedCotizacion)}
-                    className="bg-red-600 hover:bg-red-700 text-white px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors flex-1 sm:flex-none text-center"
-                  >
-                    Rechazar cotización
-                  </button>
-                  <button
-                    onClick={() => convertirAPedido(selectedCotizacion)}
-                    disabled={convertingId === selectedCotizacion.id}
-                    className="bg-green-600 hover:bg-green-700 text-white px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors disabled:bg-gray-500 flex-1 sm:flex-none text-center"
-                  >
-                    {convertingId === selectedCotizacion.id ? 'Convirtiendo...' : 'Convertir a Pedido'}
-                  </button>
+                    <button
+                      onClick={() => setCotizacionToReject(selectedCotizacion)}
+                      className="px-3 py-2 rounded-xl text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition-colors cursor-pointer"
+                    >
+                      Rechazar
+                    </button>
+                    <button
+                      onClick={() => convertirAPedido(selectedCotizacion)}
+                      disabled={convertingId === selectedCotizacion.id}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined text-base">shopping_cart_checkout</span>
+                      <span>{convertingId === selectedCotizacion.id ? 'Convirtiendo...' : 'Convertir a Pedido'}</span>
+                    </button>
                   </>
                 )}
                 <button
                   onClick={closeModal}
-                  className="bg-gray-600 hover:bg-gray-700 text-white px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors flex-1 sm:flex-none text-center"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-gray-300 border border-gray-700/80 transition-colors cursor-pointer"
                 >
                   Cerrar
                 </button>
@@ -431,168 +486,129 @@ export default function AdminCotizacionesPage() {
         </div>
       )}
 
-      {cotizacionToReject && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[70] p-4">
-          <div className="w-full max-w-md rounded-2xl border border-gray-700 bg-[#1e2939] p-6 shadow-2xl">
-            <h2 className="text-xl font-bold text-white">¿Rechazar cotización?</h2>
-            <p className="mt-3 text-sm text-gray-300">
-              La cotización <strong>{cotizacionToReject.codigo_unico}</strong> cambiará a estado rechazada.
-            </p>
-            <div className="mt-6 flex justify-end gap-3">
-              <button onClick={() => setCotizacionToReject(null)} className="rounded-lg bg-gray-700 px-4 py-2 text-sm text-white">Cancelar</button>
-              <button onClick={rechazarCotizacion} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white">Sí, rechazar</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de confirmación */}
+      {/* ── MODAL CONFIRMACIÓN DE CONVERSIÓN ── */}
       {showConfirmModal && cotizacionToConvert && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60]">
-          <div className="rounded-lg shadow-xl max-w-md w-full mx-4" style={{ backgroundColor: '#1e2939' }}>
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold text-white">Confirmar conversión</h2>
-                <button
-                  onClick={() => {
-                    setShowConfirmModal(false);
-                    setCotizacionToConvert(null);
-                  }}
-                  className="text-gray-400 hover:text-gray-200 text-2xl"
-                >
-                  ×
-                </button>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center z-[60] p-4">
+          <div className="w-full max-w-md rounded-2xl border border-gray-800 bg-[#141b28] p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                <span className="material-symbols-outlined text-2xl">shopping_cart</span>
               </div>
-
-              <div className="text-center py-4">
-                <p className="text-gray-300 mb-6">
-                  ¿Estás seguro de que quieres convertir la cotización <strong>{cotizacionToConvert.codigo_unico}</strong> de <strong>{cotizacionToConvert.nombre_cliente}</strong> en un pedido?
-                </p>
-                <div className="flex gap-4 justify-center">
-                  <button
-                    onClick={() => {
-                      setShowConfirmModal(false);
-                      setCotizacionToConvert(null);
-                    }}
-                    className="px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors border border-slate-500"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={confirmarConversion}
-                    className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors border border-green-500 shadow-lg shadow-green-500/25"
-                  >
-                    Confirmar Conversión
-                  </button>
-                </div>
-              </div>
+              <h2 className="text-lg font-bold text-white">¿Convertir en Pedido?</h2>
+            </div>
+            <p className="text-sm text-gray-300 leading-relaxed">
+              La cotización <strong className="text-cyan-400">{cotizacionToConvert.codigo_unico}</strong> de{' '}
+              <strong className="text-white">{cotizacionToConvert.nombre_cliente}</strong> se creará como un nuevo pedido activo en el sistema.
+            </p>
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-gray-300 border border-gray-700/80 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarConversion}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md transition-all"
+              >
+                Confirmar Conversión
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal de éxito */}
+      {/* ── MODAL RECHAZO DE COTIZACIÓN ── */}
+      {cotizacionToReject && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center z-[70] p-4">
+          <div className="w-full max-w-md rounded-2xl border border-gray-800 bg-[#141b28] p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400">
+                <span className="material-symbols-outlined text-2xl">cancel</span>
+              </div>
+              <h2 className="text-lg font-bold text-white">¿Rechazar cotización?</h2>
+            </div>
+            <p className="text-sm text-gray-300">
+              La cotización <strong className="text-cyan-400">{cotizacionToReject.codigo_unico}</strong> pasará a estado rechazada.
+            </p>
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button onClick={() => setCotizacionToReject(null)} className="px-4 py-2 rounded-xl text-xs font-semibold bg-white/5 text-gray-300">
+                Cancelar
+              </button>
+              <button onClick={rechazarCotizacion} className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-md">
+                Sí, rechazar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL DE ÉXITO ── */}
       {showSuccessModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60]">
-          <div className="rounded-lg shadow-xl max-w-md w-full mx-4" style={{ backgroundColor: '#1e2939' }}>
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold text-green-400">¡Éxito!</h2>
-                <button
-                  onClick={() => setShowSuccessModal(false)}
-                  className="text-gray-400 hover:text-gray-200 text-2xl"
-                >
-                  ×
-                </button>
-              </div>
-
-              <div className="text-center py-4">
-                <div className="text-4xl mb-4">✅</div>
-                <p className="text-gray-300 mb-6">{modalMessage}</p>
-                <button
-                  onClick={() => setShowSuccessModal(false)}
-                  className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors border border-green-500 shadow-lg shadow-green-500/25"
-                >
-                  Aceptar
-                </button>
-              </div>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center z-[80] p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-emerald-500/30 bg-[#141b28] p-6 text-center shadow-2xl space-y-4">
+            <div className="h-12 w-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
+              <span className="material-symbols-outlined text-2xl">check</span>
             </div>
+            <h3 className="text-lg font-bold text-white">Operación Exitosa</h3>
+            <p className="text-xs text-gray-300">{modalMessage}</p>
+            <button
+              onClick={() => setShowSuccessModal(false)}
+              className="w-full py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md"
+            >
+              Aceptar
+            </button>
           </div>
         </div>
       )}
 
-      {/* Modal de error */}
+      {/* ── MODAL DE ERROR ── */}
       {showErrorModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60]">
-          <div className="rounded-lg shadow-xl max-w-md w-full mx-4" style={{ backgroundColor: '#1e2939' }}>
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold text-red-400">Error</h2>
-                <button
-                  onClick={() => setShowErrorModal(false)}
-                  className="text-gray-400 hover:text-gray-200 text-2xl min-h-[44px] min-w-[44px] flex items-center justify-center"
-                >
-                  ×
-                </button>
-              </div>
-
-              <div className="text-center py-4">
-                <div className="text-4xl mb-4">❌</div>
-                <p className="text-gray-300 mb-6">{modalMessage}</p>
-                <button
-                  onClick={() => setShowErrorModal(false)}
-                  className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors border border-red-500 shadow-lg shadow-red-500/25 min-h-[44px]"
-                >
-                  Aceptar
-                </button>
-              </div>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center z-[80] p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-rose-500/30 bg-[#141b28] p-6 text-center shadow-2xl space-y-4">
+            <div className="h-12 w-12 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center mx-auto">
+              <span className="material-symbols-outlined text-2xl">error</span>
             </div>
+            <h3 className="text-lg font-bold text-white">Ocurrió un Error</h3>
+            <p className="text-xs text-rose-300">{modalMessage}</p>
+            <button
+              onClick={() => setShowErrorModal(false)}
+              className="w-full py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-md"
+            >
+              Aceptar
+            </button>
           </div>
         </div>
       )}
 
-      {/* Modal de acciones para móvil */}
+      {/* ── ACCIONES MÓVIL ── */}
       {mobileActionCotizacion && (
-        <div className="fixed inset-0 bg-black/80 flex items-end justify-center z-[60] md:hidden p-4">
-          <div className="rounded-2xl shadow-xl w-full mx-auto" style={{ backgroundColor: '#1e2939' }}>
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6 border-b border-gray-700 pb-4">
-                <div>
-                  <h2 className="text-xl font-bold text-white">Acciones</h2>
-                  <p className="text-gray-400 text-sm">Cotización {mobileActionCotizacion.codigo_unico}</p>
-                </div>
-                <button
-                  onClick={() => setMobileActionCotizacion(null)}
-                  className="text-gray-400 hover:text-gray-200 text-3xl min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full hover:bg-gray-800 transition-colors"
-                >
-                  ×
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <button
-                  onClick={() => {
-                    verDetalles(mobileActionCotizacion.codigo_unico);
-                    setMobileActionCotizacion(null);
-                  }}
-                  className="w-full min-h-[48px] flex items-center justify-center gap-2 text-blue-400 bg-blue-900/30 hover:bg-blue-900/50 rounded-xl px-4 text-base font-semibold transition-colors border border-blue-800/50"
-                >
-                  <span className="material-symbols-outlined">visibility</span>
-                  Ver Detalles
-                </button>
-
-                <button
-                  onClick={() => {
-                    descargarPdfCotizacion(mobileActionCotizacion.id);
-                    setMobileActionCotizacion(null);
-                  }}
-                  className="w-full min-h-[48px] flex items-center justify-center gap-2 text-cyan-400 bg-cyan-900/30 hover:bg-cyan-900/50 rounded-xl px-4 text-base font-semibold transition-colors border border-cyan-800/50"
-                >
-                  <span className="material-symbols-outlined">picture_as_pdf</span>
-                  Exportar a PDF
-                </button>
-              </div>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-end justify-center z-[60] md:hidden p-4">
+          <div className="w-full rounded-2xl border border-gray-800 bg-[#141b28] p-5 shadow-2xl space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-800">
+              <h3 className="font-bold text-white text-sm">Opciones de Cotización</h3>
+              <button onClick={() => setMobileActionCotizacion(null)} className="text-gray-400">✕</button>
             </div>
+            <button
+              onClick={() => {
+                verDetalles(mobileActionCotizacion.codigo_unico);
+                setMobileActionCotizacion(null);
+              }}
+              className="w-full py-2.5 rounded-xl bg-white/5 text-white text-xs font-semibold flex items-center justify-center gap-2"
+            >
+              <span className="material-symbols-outlined text-base">visibility</span>
+              Ver Detalles
+            </button>
+            <button
+              onClick={() => {
+                descargarPdfCotizacion(mobileActionCotizacion.id);
+                setMobileActionCotizacion(null);
+              }}
+              className="w-full py-2.5 rounded-xl bg-white/5 text-cyan-400 text-xs font-semibold flex items-center justify-center gap-2"
+            >
+              <span className="material-symbols-outlined text-base">picture_as_pdf</span>
+              Exportar PDF
+            </button>
           </div>
         </div>
       )}
