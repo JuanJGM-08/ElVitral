@@ -64,6 +64,7 @@ export async function handler(req: NextRequest) {
   if (contentType) {
     headers.set('content-type', contentType);
   }
+  headers.set('x-frontend-url', req.nextUrl.origin);
 
   try {
     let response = await fetch(backendUrl.toString(), {
@@ -105,6 +106,11 @@ export async function handler(req: NextRequest) {
     const responseBody = await response.arrayBuffer();
     const responseHeaders = new Headers(response.headers);
 
+    // Remove headers that were invalidated by fetch's automatic body decompression
+    responseHeaders.delete('content-encoding');
+    responseHeaders.delete('content-length');
+    responseHeaders.delete('transfer-encoding');
+
     // Reenviar las cookies (sid) que devuelva el backend tal cual, incluidas
     // las del refresh, de modo que el navegador conserve la sesión.
     refreshedCookies.forEach((cookie) => {
@@ -124,7 +130,7 @@ export async function handler(req: NextRequest) {
   } catch (error) {
     console.error('[API Proxy Error]', error);
     return NextResponse.json(
-      { error: 'Backend error', details: String(error) },
+      { error: 'No se pudo conectar con el servidor. Inténtalo de nuevo.' },
       { status: 502 }
     );
   }
