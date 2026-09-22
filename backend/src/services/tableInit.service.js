@@ -1,4 +1,4 @@
-  const { query } = require('../../lib/db.js');
+const { query } = require('../../lib/db.js');
 
 async function ensureSurveyTable() {
   await query(
