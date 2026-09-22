@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { memo, useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useAuth } from '@/components/AuthProvider';
 
 interface Cita {
   id: number;
@@ -23,73 +25,98 @@ const tiposIconos: Record<string, string> = {
   otro: '📅',
 };
 
-export default function AgendaWidget() {
+const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+const horasDisponibles = [
+  '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+  '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30',
+  '16:00', '16:30', '17:00',
+];
+
+function fechaParaDisplay(fecha: string) {
+  const d = new Date(`${fecha}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return fecha;
+  return `${diasSemana[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+}
+
+function AgendaWidget() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [citas, setCitas] = useState<Cita[]>([]);
+  const [diasDisponibles, setDiasDisponibles] = useState<string[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [user, setUser] = useState<{ id: number; nombre: string } | null>(null);
+  const [mensajeDelay, setMensajeDelay] = useState('');
+  const [mensajeError, setMensajeError] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     titulo: '',
     descripcion: '',
     fecha_cita: '',
+    hora_cita: '10:00',
     tipo: 'otro' as Cita['tipo'],
     notas: '',
   });
 
-  const getMinDateTimeLocal = () => {
-    const now = new Date();
-    now.setSeconds(0, 0);
-    const pad = (n: number) => n.toString().padStart(2, '0');
-    const year = now.getFullYear();
-    const month = pad(now.getMonth() + 1);
-    const day = pad(now.getDate());
-    const hours = pad(now.getHours());
-    const minutes = pad(now.getMinutes());
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-  };
-
-  const fetchCitas = async () => {
-    try {
-      const res = await fetch('/api/agenda/citas', { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        setCitas(data.sort((a: Cita, b: Cita) => new Date(a.fecha_cita).getTime() - new Date(b.fecha_cita).getTime()));
-      }
-    } catch (error) {
-      console.error('Error obteniendo citas:', error);
+  const fetchCitas = useCallback(async () => {
+    const res = await fetch('/api/agenda/citas', { credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      setCitas(data.sort((a: Cita, b: Cita) => new Date(a.fecha_cita).getTime() - new Date(b.fecha_cita).getTime()));
     }
-  };
+  }, []);
+
+  const fetchDiasDisponibles = useCallback(async () => {
+    const res = await fetch('/api/agenda/dias-disponibles', { credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+      const dias = (Array.isArray(data) ? data : []).filter((d: string) => {
+        const f = new Date(`${d}T12:00:00`);
+        return !Number.isNaN(f.getTime()) && f.getDay() !== 0 && f.getDay() !== 6 && f.getTime() >= hoy.getTime();
+      });
+      return dias as string[];
+    }
+    return [];
+  }, []);
+
+  const cargarAgenda = useCallback(async () => {
+    if (!user) return;
+    const [citasResponse, dias] = await Promise.all([
+      fetch('/api/agenda/citas', { credentials: 'include' }),
+      fetchDiasDisponibles(),
+    ]);
+    if (citasResponse.ok) {
+      const data = await citasResponse.json();
+      setCitas(data.sort((a: Cita, b: Cita) => new Date(a.fecha_cita).getTime() - new Date(b.fecha_cita).getTime()));
+    }
+    setDiasDisponibles(dias);
+    setFormData((prev) => ({ ...prev, fecha_cita: prev.fecha_cita || (dias[0] || '') }));
+  }, [fetchDiasDisponibles, user]);
 
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const res = await fetch('/api/auth/me', { credentials: 'include' });
-        if (res.ok) {
-          const userData = await res.json();
-          setUser(userData);
-          fetchCitas();
-        }
-      } catch (error) {
-        console.error('Error obteniendo usuario:', error);
-      }
-    };
-
-    fetchUser();
-  }, []);
+    if (!user || !isOpen) return;
+    const timer = setTimeout(() => {
+      void cargarAgenda();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [cargarAgenda, isOpen, user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.titulo || !formData.fecha_cita) {
-      alert('Por favor completa los campos obligatorios');
+    setMensajeError('');
+    setMensajeDelay('');
+    if (!formData.titulo || !formData.fecha_cita || !formData.hora_cita) {
+      setMensajeError('Por favor completa los campos obligatorios');
       return;
     }
 
-    const selected = new Date(formData.fecha_cita);
+    const selected = new Date(`${formData.fecha_cita}T${formData.hora_cita}:00`);
     const now = new Date();
     if (selected.getTime() < now.getTime()) {
-      alert('La fecha de la cita no puede ser anterior a la fecha actual');
+      setMensajeError('La hora de la cita no puede ser anterior a la hora actual');
       return;
     }
 
@@ -101,7 +128,7 @@ export default function AgendaWidget() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
-          fecha_cita: new Date(formData.fecha_cita).toISOString(),
+          fecha_cita: selected.toISOString(),
         }),
       });
 
@@ -109,26 +136,27 @@ export default function AgendaWidget() {
         setFormData({
           titulo: '',
           descripcion: '',
-          fecha_cita: '',
+          fecha_cita: diasDisponibles[0] || '',
+          hora_cita: '10:00',
           tipo: 'otro',
           notas: '',
         });
         setShowForm(false);
         fetchCitas();
+        setMensajeDelay('Cita creada. Recuerda que debes esperar 20 minutos para agendar otra.');
       } else {
-        alert('Error al crear la cita');
+        const data = await res.json().catch(() => ({}));
+        setMensajeError(data.error || 'Error al crear la cita');
       }
     } catch (error) {
       console.error('Error creando cita:', error);
-      alert('Error al crear la cita');
+      setMensajeError('Error al crear la cita');
     } finally {
       setLoading(false);
     }
   };
 
   const handleDeleteCita = async (citaId: number) => {
-    if (!confirm('¿Deseas eliminar esta cita?')) return;
-
     try {
       const res = await fetch('/api/agenda/citas', {
         method: 'DELETE',
@@ -142,6 +170,8 @@ export default function AgendaWidget() {
       }
     } catch (error) {
       console.error('Error eliminando cita:', error);
+    } finally {
+      setConfirmDeleteId(null);
     }
   };
 
@@ -200,6 +230,12 @@ export default function AgendaWidget() {
                   <div className="text-center text-slate-400 py-8">
                     <p className="text-xs sm:text-sm">No tienes citas próximas</p>
                     <p className="text-xs mt-2 text-slate-500">Agenda una ahora mismo</p>
+                    <Link
+                      href="/perfil/agenda"
+                      className="block w-full text-center bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-100 px-4 py-2.5 rounded-xl font-medium mt-4 text-xs sm:text-sm transition-colors"
+                    >
+                      Ver todas mis citas
+                    </Link>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -230,13 +266,30 @@ export default function AgendaWidget() {
                               {cita.estado}
                             </span>
                           </div>
-                          <button
-                            onClick={() => handleDeleteCita(cita.id)}
-                            className="text-red-500 hover:text-red-700 text-xs p-1 shrink-0 ml-1"
-                            title="Eliminar cita"
-                          >
-                            ✕
-                          </button>
+                          {confirmDeleteId === cita.id ? (
+                            <div className="flex items-center gap-2 shrink-0 ml-1">
+                              <button
+                                onClick={() => setConfirmDeleteId(null)}
+                                className="text-slate-400 hover:text-slate-200 text-xs p-1"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCita(cita.id)}
+                                className="text-red-500 hover:text-red-700 text-xs p-1 font-semibold"
+                              >
+                                Sí, eliminar
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmDeleteId(cita.id)}
+                              className="text-red-500 hover:text-red-700 text-xs p-1 shrink-0 ml-1"
+                              title="Eliminar cita"
+                            >
+                              ✕
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -245,11 +298,35 @@ export default function AgendaWidget() {
                         +{citasProximas.length - 3} más
                       </p>
                     )}
+                    <Link
+                      href="/perfil/agenda"
+                      className="block w-full text-center bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-100 px-4 py-2.5 rounded-xl font-medium mt-3 text-xs sm:text-sm transition-colors"
+                    >
+                      Ver todas mis citas
+                    </Link>
                   </div>
                 )}
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-3">
+                {diasDisponibles.length === 0 && (
+                  <div className="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-xl p-3 text-xs text-yellow-800 dark:text-yellow-200">
+                    No hay fechas disponibles por el momento. El administrador debe habilitar días para poder agendar citas.
+                  </div>
+                )}
+
+                {mensajeDelay && (
+                  <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-xl p-3 text-xs text-green-800 dark:text-green-200">
+                    {mensajeDelay}
+                  </div>
+                )}
+
+                {mensajeError && (
+                  <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-xl p-3 text-xs text-red-800 dark:text-red-200">
+                    {mensajeError}
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Título *
@@ -265,15 +342,41 @@ export default function AgendaWidget() {
 
                 <div>
                   <label className="block text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Fecha y Hora *
+                    Día disponible *
                   </label>
-                  <input
-                    type="datetime-local"
+                  <select
                     value={formData.fecha_cita}
                     onChange={(e) => setFormData({ ...formData, fecha_cita: e.target.value })}
-                    min={getMinDateTimeLocal()}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 min-w-0 max-w-full"
-                  />
+                    disabled={diasDisponibles.length === 0}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 min-w-0"
+                  >
+                    {diasDisponibles.length === 0 ? (
+                      <option value="">Sin fechas disponibles</option>
+                    ) : (
+                      diasDisponibles.map((dia) => (
+                        <option key={dia} value={dia}>
+                          {fechaParaDisplay(dia)}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Hora (8:00 a. m. a 5:00 p. m.) *
+                  </label>
+                  <select
+                    value={formData.hora_cita}
+                    onChange={(e) => setFormData({ ...formData, hora_cita: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 min-w-0"
+                  >
+                    {horasDisponibles.map((hora) => (
+                      <option key={hora} value={hora}>
+                        {hora}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
@@ -286,10 +389,8 @@ export default function AgendaWidget() {
                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 min-w-0"
                   >
                     <option value="otro">Otro</option>
-                    <option value="entrega">Entrega</option>
                     <option value="consulta">Consulta</option>
                     <option value="medidas">Medidas</option>
-                    <option value="pago">Pago</option>
                   </select>
                 </div>
 
@@ -330,3 +431,5 @@ export default function AgendaWidget() {
     </div>
   );
 }
+
+export default memo(AgendaWidget);

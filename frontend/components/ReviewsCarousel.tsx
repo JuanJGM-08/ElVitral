@@ -59,6 +59,7 @@ const ReviewsCarousel: React.FC = () => {
           autoplay={{
             delay: 6000,
             disableOnInteraction: false,
+            pauseOnMouseEnter: true,
           }}
           pagination={{
             clickable: true,
@@ -78,7 +79,6 @@ const ReviewsCarousel: React.FC = () => {
                           width={56}
                           height={56}
                           className="object-cover"
-                          unoptimized
                         />
                       </div>
                       <div>
