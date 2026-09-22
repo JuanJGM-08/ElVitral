@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 const AgendaWidget = dynamic(() => import('@/components/AgendaWidget'), {
@@ -9,6 +10,7 @@ const AgendaWidget = dynamic(() => import('@/components/AgendaWidget'), {
 });
 
 export default function DeferredAgendaWidget() {
+  const pathname = usePathname();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -27,6 +29,10 @@ export default function DeferredAgendaWidget() {
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);
     };
   }, []);
+
+  if (pathname?.startsWith('/admin')) {
+    return null;
+  }
 
   return ready ? <AgendaWidget /> : null;
 }

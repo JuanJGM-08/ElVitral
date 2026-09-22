@@ -2,7 +2,7 @@
 
 import { memo, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 
 const linkClass = 'text-gray-400 hover:text-primary text-sm transition-colors';
@@ -10,6 +10,7 @@ const linkClass = 'text-gray-400 hover:text-primary text-sm transition-colors';
 function Footer() {
   const currentYear = new Date().getFullYear();
   const router = useRouter();
+  const pathname = usePathname();
   const { user, clearUser } = useAuth();
 
   const logout = useCallback(async () => {
@@ -18,6 +19,10 @@ function Footer() {
     router.push('/');
     router.refresh();
   }, [clearUser, router]);
+
+  if (pathname?.startsWith('/admin')) {
+    return null;
+  }
 
   return (
     <footer style={{ backgroundColor: '#0f1419' }}>

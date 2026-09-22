@@ -25,23 +25,23 @@ const estadosOrdenados: Array<Pedido['estado']> = [
 ];
 
 const etiquetasEstado: Record<Pedido['estado'], string> = {
-  pendiente: 'Pendientes',
-  en_proceso: 'En proceso',
-  listo: 'Listos',
-  entregado: 'Entregados'
+  pendiente: 'Pendientes de Producción',
+  en_proceso: 'En Proceso de Fabricación',
+  listo: 'Listos para Entrega',
+  entregado: 'Entregados y Completados'
 };
 
-const colorEstado: Record<Pedido['estado'], string> = {
-  pendiente: 'bg-yellow-900/50 text-yellow-300',
-  en_proceso: 'bg-blue-900/50 text-blue-300',
-  listo: 'bg-green-900/50 text-green-300',
-  entregado: 'bg-gray-700 text-gray-300'
+const badgeEstado: Record<Pedido['estado'], string> = {
+  pendiente: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+  en_proceso: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
+  listo: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+  entregado: 'bg-gray-700/40 text-gray-400 border-gray-700'
 };
 
-const colorPago: Record<Pedido['pago'], string> = {
-  pendiente: 'bg-red-900/50 text-red-300',
-  anticipo: 'bg-yellow-900/50 text-yellow-300',
-  pagado: 'bg-green-900/50 text-green-300'
+const badgePago: Record<Pedido['pago'], string> = {
+  pendiente: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
+  anticipo: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+  pagado: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
 };
 
 export default function AdminPedidosPage() {
@@ -50,7 +50,7 @@ export default function AdminPedidosPage() {
   const [error, setError] = useState('');
   const [mensaje, setMensaje] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
 
-  // Estado para el modal de confirmación
+  // Modales
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
     type: 'estado' | 'pago';
@@ -62,30 +62,20 @@ export default function AdminPedidosPage() {
 
   const [showFechaModal, setShowFechaModal] = useState(false);
   const [fechaEntregaInput, setFechaEntregaInput] = useState('');
-  
-  // Estado para acciones móviles
   const [mobileActionPedido, setMobileActionPedido] = useState<Pedido | null>(null);
 
   const fetchPedidos = async () => {
     try {
-      const res = await fetch('/api/admin/pedidos', {
-        credentials: 'include'
-      });
-
+      const res = await fetch('/api/admin/pedidos', { credentials: 'include' });
       if (!res.ok) {
         const errorData = await res.json().catch(() => null);
-        setError(errorData?.error || `Error en la respuesta: ${res.status} ${res.statusText}`);
+        setError(errorData?.error || `Error: ${res.status} ${res.statusText}`);
         setPedidos([]);
         return;
       }
 
       const data = await res.json();
-      if (!Array.isArray(data)) {
-        setError('Datos de pedidos inválidos');
-        setPedidos([]);
-      } else {
-        setPedidos(data);
-      }
+      setPedidos(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error al cargar pedidos:', err);
       setError('Error al cargar pedidos');
@@ -103,9 +93,7 @@ export default function AdminPedidosPage() {
 
   const actualizarEstado = async (pedidoId: number, nuevoEstado: string) => {
     const pedido = pedidos.find(p => p.id === pedidoId);
-    if (!pedido) return;
-
-    if (nuevoEstado === pedido.estado) return;
+    if (!pedido || nuevoEstado === pedido.estado) return;
 
     if (nuevoEstado === 'entregado' && !pedido.fecha_entrega) {
       setMensaje({ tipo: 'error', texto: 'Debe establecer la fecha de entrega antes de marcar el pedido como entregado. Cambie el estado a "Listo" primero.' });
@@ -135,7 +123,7 @@ export default function AdminPedidosPage() {
 
   const actualizarPago = async (pedidoId: number, nuevoPago: string) => {
     const pedido = pedidos.find(p => p.id === pedidoId);
-    if (!pedido) return;
+    if (!pedido || nuevoPago === pedido.pago) return;
 
     setConfirmAction({
       type: 'pago',
@@ -178,18 +166,17 @@ export default function AdminPedidosPage() {
 
       const res = await fetch(`/api/admin/pedidos/${confirmAction.pedidoId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(payload)
       });
 
       if (res.ok) {
+        setMensaje({ tipo: 'ok', texto: 'Pedido actualizado correctamente' });
         fetchPedidos();
       } else {
-        const error = await res.json().catch(() => null);
-        setMensaje({ tipo: 'error', texto: error?.error || `Error al actualizar el ${confirmAction.type}` });
+        const errorData = await res.json().catch(() => null);
+        setMensaje({ tipo: 'error', texto: errorData?.error || `Error al actualizar el ${confirmAction.type}` });
       }
     } catch (error) {
       console.error('Error:', error);
@@ -214,384 +201,290 @@ export default function AdminPedidosPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen" style={{ backgroundColor: '#101828'}}>
-        <div className="max-w-7xl mx-auto px-4 py-12">
-          <div className="flex justify-between items-center mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-white">Gestión de Pedidos</h1>
-              <p className="text-gray-300 mt-1">Cargando pedidos desde la base de datos...</p>
-            </div>
-            <Link
-            href="/admin"
-            className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            ← Volver al Panel
-          </Link>
-          </div>
-
-          <div className="flex items-center justify-center py-16">
-            <div className="text-white text-xl">Cargando pedidos...</div>
-          </div>
-        </div>
+      <div className="flex flex-col items-center justify-center py-24 text-gray-400 space-y-3">
+        <span className="material-symbols-outlined text-4xl animate-spin text-cyan-500">sync</span>
+        <p className="text-base font-medium">Cargando pedidos de clientes...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#101828'}}>
-      <div className="max-w-7xl mx-auto px-4 py-12">
-        <div className="flex justify-between items-start gap-4 mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-white">Gestión de Pedidos</h1>
-            <p className="text-gray-300 mt-1">
-              Los pedidos están divididos por estado y se pueden actualizar desde aquí.
-            </p>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+      {/* ── ENCABEZADO DE SECCIÓN ESTILO YOUTUBE STUDIO ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-800/80">
+        <div>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/30">
+              Despachos y Ventas
+            </span>
+            <span className="text-xs text-gray-500">•</span>
+            <span className="text-xs text-gray-400 font-medium">{pedidos.length} órdenes en total</span>
           </div>
-
-          <Link
-            href="/admin"
-            className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            ← Volver al Panel
-          </Link>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
+            <span className="material-symbols-outlined text-sky-400 text-3xl">local_shipping</span>
+            Gestión de Pedidos
+          </h1>
+          <p className="text-xs sm:text-sm text-gray-400 mt-1">
+            Supervisa el estado de producción, pagos recibidos por Stripe o efectivo y comprobantes de despacho.
+          </p>
         </div>
 
-        {mensaje && (
-          <div className={`mb-6 rounded-xl border p-4 text-sm ${mensaje.tipo === 'ok' ? 'border-green-600 bg-green-900/30 text-green-200' : 'border-red-500 bg-red-900/30 text-red-200'}`}>
-            {mensaje.texto}
-          </div>
-        )}
-
-        {error ? (
-          <div className="rounded-xl bg-red-900/50 border border-red-500 p-6 text-red-200">
-            {error}
-          </div>
-        ) : pedidos.length === 0 ? (
-          <div className="rounded-lg p-10 text-center" style={{ backgroundColor: '#1e2939'}}>
-            <p className="text-gray-500 text-lg">No hay pedidos registrados</p>
-          </div>
-        ) : (
-          <div className="space-y-8">
-            {estadosOrdenados.map((estado) => {
-              const pedidosEstado = pedidosPorEstado[estado];
-
-              return (
-                <section key={estado} className="rounded-lg shadow-sm overflow-hidden" style={{ backgroundColor: '#1e2939'}}>
-                  <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700 bg-gray-800">
-                    <div>
-                      <h2 className="text-xl font-bold text-white">{etiquetasEstado[estado]}</h2>
-                      <p className="text-sm text-gray-300">{pedidosEstado.length} pedido(s)</p>
-                    </div>
-
-                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${colorEstado[estado]}`}>
-                      {estado}
-                    </span>
-                  </div>
-
-                  {pedidosEstado.length === 0 ? (
-                    <div className="p-6 text-center text-gray-400">
-                      No hay pedidos en este estado.
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead className="bg-gray-800">
-                          <tr>
-                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                              ID
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                              Fecha Pedido
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                              Cliente
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                              Fecha Entrega
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                              Total
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                              Estado
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                              Pago
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                              Acciones
-                            </th>
-                          </tr>
-                        </thead>
-
-                        <tbody className="divide-y divide-gray-700">
-                          {pedidosEstado.map((pedido) => (
-                            <tr key={pedido.id} className="hover:bg-gray-800/50">
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
-                                #{pedido.id}
-                              </td>
-
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                {new Date(pedido.fecha_pedido).toLocaleDateString()}
-                              </td>
-
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                {pedido.nombre_cliente || 'Sin nombre'}
-                              </td>
-
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                {pedido.fecha_entrega
-                                  ? new Date(pedido.fecha_entrega).toLocaleDateString()
-                                  : 'No definida'}
-                              </td>
-
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                ${formatNumber(pedido.total)}
-                              </td>
-
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span
-                                  className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${colorEstado[pedido.estado]}`}
-                                >
-                                  {pedido.estado}
-                                </span>
-                              </td>
-
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span
-                                  className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${colorPago[pedido.pago]}`}
-                                >
-                                  {pedido.pago}
-                                </span>
-                              </td>
-
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                {/* Desktop actions */}
-                                <div className="hidden md:block space-y-3">
-                                  <div>
-                                    <label className="block text-xs text-gray-400 mb-1">Estado del proceso</label>
-                                    <select
-                                      value={pedido.estado}
-                                      onChange={(e) => actualizarEstado(pedido.id, e.target.value)}
-                                      className="w-full rounded-md border border-gray-600 bg-gray-800 text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                                    >
-                                      <option value="pendiente">Pendiente</option>
-                                      <option value="en_proceso">En proceso</option>
-                                      <option value="listo">Listo</option>
-                                      <option value="entregado" disabled={!pedido.fecha_entrega}>
-                                        Entregado{!pedido.fecha_entrega ? ' (requiere fecha)' : ''}
-                                      </option>
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs text-gray-400 mb-1">Estado del pago</label>
-                                    <select
-                                      value={pedido.pago}
-                                      onChange={(e) => actualizarPago(pedido.id, e.target.value)}
-                                      className="w-full rounded-md border border-gray-600 bg-gray-800 text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                                    >
-                                      <option value="pendiente">Pendiente</option>
-                                      <option value="anticipo">Anticipo</option>
-                                      <option value="pagado">Pagado</option>
-                                    </select>
-                                  </div>
-                                  <button
-                                    onClick={() => descargarPdfPedido(pedido.id)}
-                                    className="w-full text-left text-cyan-400 hover:text-cyan-300 text-sm font-medium py-2"
-                                  >
-                                    Exportar PDF
-                                  </button>
-                                </div>
-                                
-                                {/* Mobile actions button */}
-                                <div className="md:hidden">
-                                  <button
-                                    onClick={() => setMobileActionPedido(pedido)}
-                                    className="w-full min-h-[44px] flex items-center justify-center gap-2 rounded-lg bg-gray-700 hover:bg-gray-600 px-4 py-2 text-white transition-colors border border-gray-600"
-                                  >
-                                    <span className="material-symbols-outlined text-sm">settings</span>
-                                    Acciones
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </section>
-              );
-            })}
-          </div>
-        )}
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={fetchPedidos}
+            title="Recargar pedidos"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-gray-700/80 transition-colors cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-base">refresh</span>
+            <span>Actualizar</span>
+          </button>
+        </div>
       </div>
 
-      {/* Modal de fecha de entrega (al marcar como listo) */}
+      {/* ── MENSAJES DE ALERTA ── */}
+      {mensaje && (
+        <div
+          className={`rounded-xl border p-4 text-sm flex items-center justify-between gap-3 ${
+            mensaje.tipo === 'ok'
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+              : 'border-rose-500/30 bg-rose-500/10 text-rose-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined">
+              {mensaje.tipo === 'ok' ? 'check_circle' : 'error'}
+            </span>
+            <span>{mensaje.texto}</span>
+          </div>
+          <button onClick={() => setMensaje(null)} className="text-gray-400 hover:text-white">✕</button>
+        </div>
+      )}
+
+      {error && (
+        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300 flex items-center gap-2">
+          <span className="material-symbols-outlined text-rose-400">error</span>
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* ── SECCIONES AGRUPADAS POR ESTADO ── */}
+      {pedidos.length === 0 ? (
+        <div className="rounded-2xl border border-gray-800 bg-[#141b28] p-12 text-center">
+          <span className="material-symbols-outlined text-5xl text-gray-600 mb-2">inventory</span>
+          <p className="text-gray-300 text-base font-semibold">No hay pedidos registrados</p>
+          <p className="text-gray-500 text-xs mt-1">Los pedidos convertidos desde cotizaciones aparecerán aquí.</p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {estadosOrdenados.map((estado) => {
+            const pedidosEstado = pedidosPorEstado[estado];
+            return (
+              <section
+                key={estado}
+                className="rounded-2xl border border-gray-800/80 bg-[#141b28] shadow-xl overflow-hidden"
+              >
+                {/* Cabecera del Grupo */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 bg-[#182233]">
+                  <div>
+                    <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
+                      <span>{etiquetasEstado[estado]}</span>
+                      <span className="text-xs font-normal text-gray-400">({pedidosEstado.length})</span>
+                    </h2>
+                  </div>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold border capitalize ${badgeEstado[estado]}`}
+                  >
+                    {estado}
+                  </span>
+                </div>
+
+                {pedidosEstado.length === 0 ? (
+                  <div className="p-8 text-center text-gray-500 text-xs">
+                    No hay pedidos en este estado actualmente.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[900px] text-left">
+                      <thead className="bg-[#121824] text-gray-400 text-[11px] font-bold uppercase tracking-wider border-b border-gray-800/60">
+                        <tr>
+                          <th className="px-5 py-3">ID</th>
+                          <th className="px-5 py-3">Cliente</th>
+                          <th className="px-5 py-3">Fecha Pedido</th>
+                          <th className="px-5 py-3">Fecha Entrega</th>
+                          <th className="px-5 py-3">Total</th>
+                          <th className="px-5 py-3">Estado Pago</th>
+                          <th className="px-5 py-3">Cambiar Proceso</th>
+                          <th className="px-5 py-3">Cambiar Pago</th>
+                          <th className="px-5 py-3 text-right">PDF</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-800/60 text-sm">
+                        {pedidosEstado.map((pedido) => (
+                          <tr key={pedido.id} className="hover:bg-white/[0.02] transition-colors group">
+                            {/* ID */}
+                            <td className="px-5 py-3.5 font-mono text-xs font-bold text-cyan-400 whitespace-nowrap">
+                              #{pedido.id}
+                            </td>
+
+                            {/* Cliente */}
+                            <td className="px-5 py-3.5 font-semibold text-white whitespace-nowrap group-hover:text-cyan-400 transition-colors">
+                              {pedido.nombre_cliente || 'Sin nombre registrado'}
+                            </td>
+
+                            {/* Fecha Pedido */}
+                            <td className="px-5 py-3.5 text-xs text-gray-400 whitespace-nowrap">
+                              {new Date(pedido.fecha_pedido).toLocaleDateString('es-CO')}
+                            </td>
+
+                            {/* Fecha Entrega */}
+                            <td className="px-5 py-3.5 text-xs text-gray-300 whitespace-nowrap">
+                              {pedido.fecha_entrega ? (
+                                <span className="text-emerald-400 font-medium">
+                                  {new Date(pedido.fecha_entrega).toLocaleDateString('es-CO')}
+                                </span>
+                              ) : (
+                                <span className="text-gray-500 italic">No asignada</span>
+                              )}
+                            </td>
+
+                            {/* Total */}
+                            <td className="px-5 py-3.5 font-mono font-bold text-white whitespace-nowrap">
+                              ${formatNumber(pedido.total)} COP
+                            </td>
+
+                            {/* Estado Pago Badge */}
+                            <td className="px-5 py-3.5 whitespace-nowrap">
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold border capitalize ${badgePago[pedido.pago]}`}
+                              >
+                                {pedido.pago}
+                              </span>
+                            </td>
+
+                            {/* Selector Estado Proceso */}
+                            <td className="px-5 py-3.5 whitespace-nowrap">
+                              <select
+                                value={pedido.estado}
+                                onChange={(e) => actualizarEstado(pedido.id, e.target.value)}
+                                className="rounded-xl bg-[#0f141f] border border-gray-700/80 px-2.5 py-1 text-xs text-gray-200 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                              >
+                                <option value="pendiente">Pendiente</option>
+                                <option value="en_proceso">En proceso</option>
+                                <option value="listo">Listo</option>
+                                <option value="entregado" disabled={!pedido.fecha_entrega}>
+                                  Entregado{!pedido.fecha_entrega ? ' (requiere fecha)' : ''}
+                                </option>
+                              </select>
+                            </td>
+
+                            {/* Selector Estado Pago */}
+                            <td className="px-5 py-3.5 whitespace-nowrap">
+                              <select
+                                value={pedido.pago}
+                                onChange={(e) => actualizarPago(pedido.id, e.target.value)}
+                                className="rounded-xl bg-[#0f141f] border border-gray-700/80 px-2.5 py-1 text-xs text-gray-200 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                              >
+                                <option value="pendiente">Pendiente</option>
+                                <option value="anticipo">Anticipo</option>
+                                <option value="pagado">Pagado</option>
+                              </select>
+                            </td>
+
+                            {/* Exportar PDF */}
+                            <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                              <button
+                                onClick={() => descargarPdfPedido(pedido.id)}
+                                title="Descargar comprobante de pedido"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-cyan-400 border border-gray-700/80 transition-colors cursor-pointer"
+                              >
+                                <span className="material-symbols-outlined text-base">picture_as_pdf</span>
+                                <span>PDF</span>
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── MODAL FECHA DE ENTREGA ── */}
       {showFechaModal && confirmAction && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="rounded-lg shadow-xl max-w-md w-full mx-4" style={{ backgroundColor: '#1e2939' }}>
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold text-white">Fecha de entrega</h2>
-                <button
-                  onClick={() => {
-                    setShowFechaModal(false);
-                    setConfirmAction(null);
-                    setFechaEntregaInput('');
-                  }}
-                  className="text-gray-400 hover:text-gray-200 text-2xl"
-                >
-                  ×
-                </button>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-gray-800 bg-[#141b28] p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+                <span className="material-symbols-outlined text-2xl">event</span>
               </div>
-
-              <p className="text-gray-300 mb-4">
-                Indique la fecha en la que se entregará el pedido #{confirmAction.pedidoId}.
-              </p>
-
-              <label className="block text-sm text-gray-400 mb-2">Fecha de entrega</label>
+              <h2 className="text-lg font-bold text-white">Fecha Programada de Entrega</h2>
+            </div>
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Indica la fecha acordada para despachar el pedido <strong className="text-cyan-400">#{confirmAction.pedidoId}</strong>.
+            </p>
+            <div>
+              <label className="block text-xs font-semibold text-gray-300 mb-1.5">Fecha de Entrega</label>
               <input
                 type="date"
                 value={fechaEntregaInput}
                 onChange={(e) => setFechaEntregaInput(e.target.value)}
                 min={new Date().toISOString().split('T')[0]}
-                className="w-full rounded-md border border-gray-600 bg-gray-800 text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary mb-6"
+                className="w-full rounded-xl border border-gray-700/80 bg-[#0f141f] text-white px-3.5 py-2 text-sm focus:outline-none focus:border-cyan-500"
               />
-
-              <div className="flex gap-4 justify-end">
-                <button
-                  onClick={() => {
-                    setShowFechaModal(false);
-                    setConfirmAction(null);
-                    setFechaEntregaInput('');
-                  }}
-                  className="px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors border border-slate-500"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={confirmarFechaEntrega}
-                  className="px-6 py-3 bg-primary hover:bg-secondary text-white font-semibold rounded-lg transition-colors border border-sky-500 shadow-lg shadow-sky-500/25"
-                >
-                  Continuar
-                </button>
-              </div>
+            </div>
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button
+                onClick={() => {
+                  setShowFechaModal(false);
+                  setConfirmAction(null);
+                  setFechaEntregaInput('');
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-white/5 text-gray-300"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarFechaEntrega}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-md"
+              >
+                Continuar
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal de confirmación */}
+      {/* ── MODAL DE CONFIRMACIÓN ── */}
       {showConfirmModal && confirmAction && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60]">
-          <div className="rounded-lg shadow-xl max-w-md w-full mx-4" style={{ backgroundColor: '#1e2939' }}>
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold text-white">Confirmar cambio</h2>
-                <button
-                  onClick={() => {
-                    setShowConfirmModal(false);
-                    setConfirmAction(null);
-                  }}
-                  className="text-gray-400 hover:text-gray-200 text-2xl min-h-[44px] min-w-[44px] flex items-center justify-center"
-                >
-                  ×
-                </button>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center z-[60] p-4">
+          <div className="w-full max-w-md rounded-2xl border border-gray-800 bg-[#141b28] p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
+                <span className="material-symbols-outlined text-2xl">help_outline</span>
               </div>
-
-              <div className="text-center py-4">
-                <p className="text-gray-300 mb-6">{confirmAction.mensaje}</p>
-                <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  <button
-                    onClick={() => {
-                      setShowConfirmModal(false);
-                      setConfirmAction(null);
-                    }}
-                    className="w-full sm:w-auto min-h-[44px] px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors border border-slate-500"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={confirmarCambio}
-                    className="w-full sm:w-auto min-h-[44px] px-6 py-3 bg-primary hover:bg-secondary text-white font-semibold rounded-lg transition-colors border border-sky-500 shadow-lg shadow-sky-500/25"
-                  >
-                    Confirmar
-                  </button>
-                </div>
-              </div>
+              <h2 className="text-lg font-bold text-white">Confirmar Actualización</h2>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de acciones para móvil */}
-      {mobileActionPedido && (
-        <div className="fixed inset-0 bg-black/80 flex items-end justify-center z-50 md:hidden p-4">
-          <div className="rounded-2xl shadow-xl w-full mx-auto" style={{ backgroundColor: '#1e2939' }}>
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6 border-b border-gray-700 pb-4">
-                <div>
-                  <h2 className="text-xl font-bold text-white">Acciones del Pedido</h2>
-                  <p className="text-gray-400 text-sm">Pedido #{mobileActionPedido.id}</p>
-                </div>
-                <button
-                  onClick={() => setMobileActionPedido(null)}
-                  className="text-gray-400 hover:text-gray-200 text-3xl min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full hover:bg-gray-800 transition-colors"
-                >
-                  ×
-                </button>
-              </div>
-
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Estado del proceso</label>
-                  <select
-                    value={mobileActionPedido.estado}
-                    onChange={(e) => {
-                      actualizarEstado(mobileActionPedido.id, e.target.value);
-                      setMobileActionPedido(null);
-                    }}
-                    className="w-full min-h-[48px] rounded-xl border border-gray-600 bg-gray-800 text-white px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary shadow-sm appearance-none"
-                  >
-                    <option value="pendiente">Pendiente</option>
-                    <option value="en_proceso">En proceso</option>
-                    <option value="listo">Listo</option>
-                    <option value="entregado" disabled={!mobileActionPedido.fecha_entrega}>
-                      Entregado{!mobileActionPedido.fecha_entrega ? ' (requiere fecha)' : ''}
-                    </option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Estado del pago</label>
-                  <select
-                    value={mobileActionPedido.pago}
-                    onChange={(e) => {
-                      actualizarPago(mobileActionPedido.id, e.target.value);
-                      setMobileActionPedido(null);
-                    }}
-                    className="w-full min-h-[48px] rounded-xl border border-gray-600 bg-gray-800 text-white px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary shadow-sm appearance-none"
-                  >
-                    <option value="pendiente">Pendiente</option>
-                    <option value="anticipo">Anticipo</option>
-                    <option value="pagado">Pagado</option>
-                  </select>
-                </div>
-
-                <div className="pt-2">
-                  <button
-                    onClick={() => {
-                      descargarPdfPedido(mobileActionPedido.id);
-                      setMobileActionPedido(null);
-                    }}
-                    className="w-full min-h-[48px] flex items-center justify-center gap-2 text-cyan-400 bg-cyan-900/30 hover:bg-cyan-900/50 rounded-xl px-4 text-base font-semibold transition-colors border border-cyan-800/50"
-                  >
-                    <span className="material-symbols-outlined">picture_as_pdf</span>
-                    Exportar a PDF
-                  </button>
-                </div>
-              </div>
+            <p className="text-sm text-gray-300 leading-relaxed">{confirmAction.mensaje}</p>
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button
+                onClick={() => {
+                  setShowConfirmModal(false);
+                  setConfirmAction(null);
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-white/5 text-gray-300"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarCambio}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-md"
+              >
+                Confirmar
+              </button>
             </div>
           </div>
         </div>
