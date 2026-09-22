@@ -1,45 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-
-interface User {
-  id: number;
-  nombre: string;
-  email: string;
-  rol: string;
-  telefono?: string;
-  direccion?: string;
-}
+import { useAuth } from '@/components/AuthProvider';
 
 export default function PerfilPage() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { user, loading } = useAuth();
+  const [error] = useState('');
   const [showId, setShowId] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const res = await fetch('/api/auth/me');
-        if (!res.ok) {
-          router.push('/login');
-          return;
-        }
-
-        const data = await res.json();
-        setUser(data);
-      } catch {
-        setError('No se pudo cargar el usuario.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchUser();
-  }, [router]);
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [loading, user, router]);
 
   if (loading) {
     return (
@@ -144,11 +120,21 @@ export default function PerfilPage() {
               >
                 Editar perfil
               </Link>
-              <Link 
-                href="/cotizaciones" 
+<Link
+                href="/cotizaciones"
                 className="flex items-center justify-center rounded-xl bg-cyan-600 hover:bg-cyan-500 py-2.5 text-xs font-semibold text-white transition-all shadow-lg shadow-cyan-950/50 text-center"
               >
                 Ver mis cotizaciones
+              </Link>
+            </div>
+
+            {/* Agenda */}
+            <div className="grid gap-3 sm:grid-cols-2 pt-4 border-t border-gray-800">
+              <Link
+                href="/perfil/agenda"
+                className="flex items-center justify-center rounded-xl border border-gray-700 bg-gray-900/80 hover:bg-gray-800 py-2.5 text-xs font-semibold text-white transition-all text-center"
+              >
+                Mi agenda
               </Link>
             </div>
           </div>
